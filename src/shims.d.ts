@@ -6,3 +6,5 @@ declare module '*.vue' {
   const component: any
   export default component
 }
+declare module 'webext-bridge/content-script'
+declare module 'webext-bridge/background'

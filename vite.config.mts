@@ -14,11 +14,7 @@ import packageJson from './package.json'
 
 export const sharedConfig: UserConfig = {
   root: r('src'),
-  resolve: {
-    alias: {
-      '~/': `${r('src')}/`,
-    },
-  },
+  resolve: { alias: { '~/': `${r('src')}/` } },
   define: {
     __DEV__: isDev,
     __NAME__: JSON.stringify(packageJson.name),
@@ -29,11 +25,7 @@ export const sharedConfig: UserConfig = {
     AutoImport({
       imports: [
         'vue',
-        {
-          'webextension-polyfill': [
-            ['=', 'browser'],
-          ],
-        },
+        { 'webextension-polyfill': [['=', 'browser']] },
       ],
       dts: r('src/auto-imports.d.ts'),
     }),
@@ -45,9 +37,7 @@ export const sharedConfig: UserConfig = {
       dts: r('src/components.d.ts'),
       resolvers: [
         // auto import icons
-        IconsResolver({
-          prefix: '',
-        }),
+        IconsResolver({ prefix: '' }),
       ],
     }),
 
@@ -68,14 +58,8 @@ export const sharedConfig: UserConfig = {
     },
   ],
   optimizeDeps: {
-    include: [
-      'vue',
-      '@vueuse/core',
-      'webextension-polyfill',
-    ],
-    exclude: [
-      'vue-demi',
-    ],
+    include: ['vue', '@vueuse/core', 'webextension-polyfill'],
+    exclude: ['vue-demi'],
   },
 }
 
@@ -84,22 +68,16 @@ export default defineConfig(({ command }) => ({
   base: command === 'serve' ? `http://localhost:${port}/` : '/dist/',
   server: {
     port,
-    hmr: {
-      host: 'localhost',
-    },
+    hmr: { host: 'localhost' },
     origin: `http://localhost:${port}`,
   },
   build: {
-    watch: isDev
-      ? {}
-      : undefined,
+    watch: isDev ? {} : undefined,
     outDir: r('extension/dist'),
     emptyOutDir: false,
     sourcemap: isDev ? 'inline' : false,
     // https://developer.chrome.com/docs/webstore/program_policies/#:~:text=Code%20Readability%20Requirements
-    terserOptions: {
-      mangle: false,
-    },
+    terserOptions: { mangle: false },
     rollupOptions: {
       input: {
         options: r('src/options/index.html'),
@@ -108,8 +86,5 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-  },
+  test: { globals: true, environment: 'jsdom' },
 }))

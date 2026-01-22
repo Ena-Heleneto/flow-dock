@@ -9,7 +9,7 @@ import { setupApp } from '~/logic/common-setup'
   console.info('[vitesse-webext] Hello world from content script')
 
   // communication example: send previous tab title from background page
-  onMessage('tab-prev', ({ data }) => {
+  onMessage('tab-prev', ({ data }: { data: { title: string } }) => {
     console.log(`[vitesse-webext] Navigate from page "${data.title}"`)
   })
 
