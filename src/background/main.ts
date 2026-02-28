@@ -6,7 +6,9 @@ if (import.meta.hot) {
   // @ts-expect-error for background HMR
   import('/@vite/client')
   // load latest content script
-  import('./contentScriptHMR')
+  import('./contentScriptHMR').then(({ registerContentScriptHMR }) => {
+    registerContentScriptHMR(import.meta.env.VITE_DEV_CONTENT_SCRIPT_FILE || 'dist/contentScripts/index.global.js')
+  })
 }
 
 // remove or turn this off if you don't use side panel

@@ -1,0 +1,1 @@
+import '~/contentScripts/index'

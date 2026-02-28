@@ -14,6 +14,7 @@ import packageJson from './package.json'
 
 export const sharedConfig: UserConfig = {
   root: r('src'),
+  publicDir: r('public'),
   resolve: { alias: { '~/': `${r('src')}/` } },
   define: {
     __DEV__: isDev,
@@ -28,6 +29,7 @@ export const sharedConfig: UserConfig = {
         { 'webextension-polyfill': [['=', 'browser']] },
       ],
       dts: r('src/auto-imports.d.ts'),
+      dirs: ['composables', 'schemas'],
     }),
 
     // https://github.com/antfu/unplugin-vue-components
@@ -68,6 +70,7 @@ export default defineConfig(({ command }) => ({
   base: command === 'serve' ? `http://localhost:${port}/` : '/dist/',
   server: {
     port,
+    host: true,
     hmr: { host: 'localhost' },
     origin: `http://localhost:${port}`,
   },
@@ -76,8 +79,7 @@ export default defineConfig(({ command }) => ({
     outDir: r('extension/dist'),
     emptyOutDir: false,
     sourcemap: isDev ? 'inline' : false,
-    // https://developer.chrome.com/docs/webstore/program_policies/#:~:text=Code%20Readability%20Requirements
-    terserOptions: { mangle: false },
+    minify: false,
     rollupOptions: {
       input: {
         options: r('src/options/index.html'),
