@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * 用于存储打包数据的存储区名称
  * @constant
@@ -152,6 +154,8 @@ function filterActiveBundles(bundles: BundleRecord[]): BundleRecord[] {
 }
 
 export function bundleSchema(options: BundleSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:bundle')
+
   /**
    * 初始化 IndexedDB 数据库实例
    * @description 创建一个 IndexedDB 数据库连接，用于存储和管理 bundle 数据的持久化
@@ -375,7 +379,7 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
     return updateBundle(id, { updatedAt: Date.now() })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createBundle,
     getBundle,
     listBundles,
@@ -389,7 +393,7 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
     listByTemplateSig,
     getByTemplateSig,
     touchBundle,
-  }
+  })
 }
 
 export const bundle = bundlesStoreDefinition

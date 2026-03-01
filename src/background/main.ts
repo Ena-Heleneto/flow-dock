@@ -1,5 +1,6 @@
 import { onMessage, sendMessage } from 'webext-bridge/background'
 import type { Tabs } from 'webextension-polyfill'
+import { registerControllers } from './register'
 
 // only on dev mode
 if (import.meta.hot) {
@@ -28,6 +29,7 @@ browser.runtime.onInstalled.addListener((): void => {
 })
 
 let previousTabId = 0
+registerControllers()
 
 // communication example: send previous tab title from background page
 // see shim.d.ts for type declaration

@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * 页面包的存储名称常量
  * 用于标识IndexedDB或其他存储机制中的页面包数据存储位置
@@ -133,6 +135,8 @@ function filterActiveRelations(records: PageBundleRecord[]) {
 }
 
 export function pageBundlesSchema(options: PageBundlesSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:page_bundles')
+
   /**
    * 初始化 IndexedDB 实例
    * @param {object} options - 配置选项
@@ -380,7 +384,7 @@ export function pageBundlesSchema(options: PageBundlesSchemaOptions = {}) {
     })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createPageBundle,
     getPageBundle,
     getByPageAndBundle,
@@ -395,7 +399,7 @@ export function pageBundlesSchema(options: PageBundlesSchemaOptions = {}) {
     listByPageId,
     listByBundleId,
     listByRole,
-  }
+  })
 }
 
 export const page_bundles = pageBundlesStoreDefinition

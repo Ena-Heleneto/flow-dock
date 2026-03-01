@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * IndexedDB存储中键值对配置的存储名称常量
  * @constant
@@ -108,6 +110,8 @@ function filterActiveConfigs(records: KvConfigRecord[]) {
 }
 
 export function kvConfigsSchema(options: KvConfigsSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:kv_configs')
+
   /**
    * 初始化IndexedDB实例用于管理键值配置存储
    * @param {object} options - 配置选项
@@ -325,7 +329,7 @@ export function kvConfigsSchema(options: KvConfigsSchemaOptions = {}) {
     })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createConfig,
     getConfig,
     getValue,
@@ -339,7 +343,7 @@ export function kvConfigsSchema(options: KvConfigsSchemaOptions = {}) {
     clearConfigs,
     countConfigs,
     listByUpdatedAtRange,
-  }
+  })
 }
 
 export const kv_configs = kvConfigsStoreDefinition

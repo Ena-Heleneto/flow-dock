@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * 组件存储的名称常量
  * @const
@@ -146,6 +148,8 @@ function filterActiveComponents(components: ComponentRecord[]): ComponentRecord[
 }
 
 export function componentsSchema(options: ComponentsSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:components')
+
   /**
    * 初始化 IndexedDB 实例用于存储组件数据
    * @param {object} options - 配置选项
@@ -358,7 +362,7 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
     return updateComponent(id, { lastSeen: Date.now() })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createComponent,
     getComponent,
     listComponents,
@@ -372,5 +376,5 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
     listBySignature,
     getBySignature,
     touchComponent,
-  }
+  })
 }

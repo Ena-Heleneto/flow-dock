@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 export const SCREENSHOTS_STORE_NAME = 'screenshots'
 
 export type ScreenshotId = string
@@ -55,6 +57,8 @@ function filterActiveScreenshots(records: ScreenshotRecord[]) {
 }
 
 export function screenshotsSchema(options: ScreenshotsSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:screenshots')
+
   const idb = useIdb({
     dbName: options.dbName ?? 'flow-dock',
     version: options.version ?? 1,
@@ -175,7 +179,7 @@ export function screenshotsSchema(options: ScreenshotsSchemaOptions = {}) {
     })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createScreenshot,
     getScreenshot,
     listScreenshots,
@@ -189,7 +193,7 @@ export function screenshotsSchema(options: ScreenshotsSchemaOptions = {}) {
     listByPageId,
     listByClusterId,
     listByTsRange,
-  }
+  })
 }
 
 export const screenshots = screenshotsStoreDefinition

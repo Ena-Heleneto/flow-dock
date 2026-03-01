@@ -191,7 +191,7 @@ onMounted(async () => {
         </div>
 
         <ul v-else class="mt-3 space-y-2 max-h-[70vh] overflow-auto">
-          <li v-for="(row, idx) in rows" :key="idx" class="border border-gray-300 rounded p-2">
+          <li v-for="(row, idx) in rows" :key="idx" m="y-2" class="border border-gray-300 rounded p-2">
             <pre class="whitespace-pre-wrap break-all text-xs">{{ formatRow(row) }}</pre>
           </li>
         </ul>

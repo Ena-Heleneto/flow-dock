@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * 集群链接存储的名称常量
  * 用于标识集群链接数据在存储中的键名
@@ -141,6 +143,8 @@ function filterActiveLinks(records: ClusterLinkRecord[]) {
 }
 
 export function clusterLinksSchema(options: ClusterLinksSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:cluster_links')
+
   /**
    * 初始化 IndexedDB 实例
    * @description 使用 useIdb 钩子创建一个 IndexedDB 数据库连接，用于存储集群链接数据
@@ -469,7 +473,7 @@ export function clusterLinksSchema(options: ClusterLinksSchemaOptions = {}) {
     return createClusterLink({ clusterId, entityType: 'screenshot', entityId: screenshotId, role, score, sourcePageId })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createClusterLink,
     getClusterLink,
     getByEntity,
@@ -489,7 +493,7 @@ export function clusterLinksSchema(options: ClusterLinksSchemaOptions = {}) {
     linkComponent,
     linkBundle,
     linkScreenshot,
-  }
+  })
 }
 
 export const cluster_links = clusterLinksStoreDefinition

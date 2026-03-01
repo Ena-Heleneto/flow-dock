@@ -12,11 +12,19 @@ function openOptionsPage() {
     <div>Sidepanel</div>
     <SharedSubtitle />
 
-    <button class="btn mt-2" @click="openOptionsPage">
-      Open Options
-    </button>
-    <div class="mt-2">
-      <span class="opacity-50">Storage:</span> {{ storageDemo }}
+    <div flex="~ col">
+      <button class="btn mt-2" @click="openOptionsPage">
+        Open Options111
+      </button>
+      <button class="btn mt-2" @click="openOptionsPage">
+        数据库查看器
+      </button>
+    </div>
+    <div m="t-2">
+      <span opacity="50">Storage:</span>
+      <span>
+        {{ storageDemo }}
+      </span>
     </div>
   </main>
 </template>

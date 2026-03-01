@@ -92,6 +92,45 @@ export function useIdb(options: UseIdbOptions) {
    */
   const { dbName, version = 1, stores = [] } = options
 
+  function hasAllConfiguredStores(database: IDBDatabase) {
+    return stores.every(storeDefinition => database.objectStoreNames.contains(storeDefinition.name))
+  }
+
+  function openWithVersion(targetVersion: number) {
+    return new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(dbName, targetVersion)
+
+      request.onupgradeneeded = () => {
+        const database = request.result
+
+        for (const storeDefinition of stores) {
+          const { name, options, indexes = [] } = storeDefinition
+          const store = database.objectStoreNames.contains(name)
+            ? request.transaction?.objectStore(name)
+            : database.createObjectStore(name, options)
+
+          if (!store)
+            continue
+
+          for (const index of indexes) {
+            if (!store.indexNames.contains(index.name))
+              store.createIndex(index.name, index.keyPath, index.options)
+          }
+        }
+      }
+
+      request.onsuccess = () => {
+        const database = request.result
+        database.onversionchange = () => {
+          database.close()
+        }
+        resolve(database)
+      }
+      request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB'))
+      request.onblocked = () => reject(new Error('Open blocked by another open IndexedDB connection'))
+    })
+  }
+
   /**
    * IDB 数据库连接的 Promise 对象
    * 用于缓存数据库连接，避免重复创建
@@ -117,31 +156,15 @@ export function useIdb(options: UseIdbOptions) {
     if (dbPromise)
       return dbPromise
 
-    dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(dbName, version)
+    dbPromise = (async () => {
+      const database = await openWithVersion(version)
+      if (hasAllConfiguredStores(database))
+        return database
 
-      request.onupgradeneeded = () => {
-        const database = request.result
-
-        for (const storeDefinition of stores) {
-          const { name, options, indexes = [] } = storeDefinition
-          const store = database.objectStoreNames.contains(name)
-            ? request.transaction?.objectStore(name)
-            : database.createObjectStore(name, options)
-
-          if (!store)
-            continue
-
-          for (const index of indexes) {
-            if (!store.indexNames.contains(index.name))
-              store.createIndex(index.name, index.keyPath, index.options)
-          }
-        }
-      }
-
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB'))
-    })
+      const nextVersion = database.version + 1
+      database.close()
+      return await openWithVersion(nextVersion)
+    })()
 
     return dbPromise
   }

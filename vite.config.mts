@@ -27,9 +27,10 @@ export const sharedConfig: UserConfig = {
       imports: [
         'vue',
         { 'webextension-polyfill': [['=', 'browser']] },
+        { consola: [['default', 'consola']] },
       ],
       dts: r('src/auto-imports.d.ts'),
-      dirs: ['composables', 'schemas'],
+      dirs: ['composables', 'schemas', 'utils'],
     }),
 
     // https://github.com/antfu/unplugin-vue-components
@@ -82,7 +83,7 @@ export default defineConfig(({ command }) => ({
     minify: false,
     rollupOptions: {
       input: {
-        options: r('src/options/index.html'),
+        options: r('src/database/index.html'),
         popup: r('src/popup/index.html'),
         sidepanel: r('src/sidepanel/index.html'),
       },

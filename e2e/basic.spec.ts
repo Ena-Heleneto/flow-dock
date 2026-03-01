@@ -15,6 +15,6 @@ test('popup page', async ({ page, extensionId }) => {
 })
 
 test('options page', async ({ page, extensionId }) => {
-  await page.goto(`chrome-extension://${extensionId}/dist/options/index.html`)
-  await expect(page.locator('img')).toHaveAttribute('alt', 'extension icon')
+  await page.goto(`chrome-extension://${extensionId}/dist/database/index.html`)
+  await expect(page.locator('text=Database Viewer')).toBeVisible()
 })

@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 export const SCREENSHOT_LINKS_STORE_NAME = 'screenshot_links'
 
 export type ScreenshotLinkId = string
@@ -53,6 +55,8 @@ function createLinkId(screenshotId: string): ScreenshotLinkId {
 }
 
 export function screenshotLinksSchema(options: ScreenshotLinksSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:screenshot_links')
+
   const idb = useIdb({
     dbName: options.dbName ?? 'flow-dock',
     version: options.version ?? 1,
@@ -225,7 +229,7 @@ export function screenshotLinksSchema(options: ScreenshotLinksSchemaOptions = {}
     })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createScreenshotLink,
     getScreenshotLink,
     getByScreenshotId,
@@ -241,7 +245,7 @@ export function screenshotLinksSchema(options: ScreenshotLinksSchemaOptions = {}
     getByComponentId,
     getByBundleId,
     listByTsRange,
-  }
+  })
 }
 
 export const screenshot_links = screenshotLinksStoreDefinition

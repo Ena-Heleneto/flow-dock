@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * 集群存储的名称常量
  * @constant
@@ -143,6 +145,8 @@ function filterActiveClusters(records: ClusterRecord[]) {
 }
 
 export function clustersSchema(options: ClustersSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:clusters')
+
   /**
    * 初始化 IndexedDB 数据库实例
    * @param {object} options - 配置选项
@@ -360,7 +364,7 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
     return updateCluster(id, { exportedAt: Date.now(), ts: Date.now() })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createCluster,
     getCluster,
     listClusters,
@@ -375,7 +379,7 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
     getBySignature,
     listByTsRange,
     markExported,
-  }
+  })
 }
 
 export const clusters = clustersStoreDefinition

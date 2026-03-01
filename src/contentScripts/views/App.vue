@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import { useDraggable } from '@vueuse/core'
 import { computed, onMounted, ref } from 'vue'
+import { sendMessage } from 'webext-bridge/content-script'
 import 'uno.css'
-import consola from 'consola'
+// import logger from '~/utils/logger.util'
 
 const hasMoved = ref<boolean>(false)
 const startPos = ref<{ x: number, y: number } | null>(null)
-function handleClick() {
+async function handleClick() {
   // show.value = !show.value
-  consola.log('Button clicked!')
+  logger.log('Button clicked!')
+  try {
+    const result = await sendMessage('save-page', {}, 'background')
+    logger.success('save-page success', result)
+  }
+  catch (error) {
+    logger.error('save-page failed', error)
+  }
 }
 
-// const DragTargetRef = ref<HTMLElement | null>(null)
 const DragTargetRef = useTemplateRef<HTMLElement | null>('DragTargetRef')
 
 const { x, y, style, isDragging } = useDraggable(DragTargetRef, {

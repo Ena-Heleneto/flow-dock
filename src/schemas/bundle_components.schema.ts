@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * Bundle 组件的存储名称常量
  * 用于在数据库或缓存中识别和存储 Bundle 相关的组件数据
@@ -133,6 +135,8 @@ function filterActiveRelations(records: BundleComponentRecord[]) {
 }
 
 export function bundleComponentsSchema(options: BundleComponentsSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:bundle_components')
+
   /**
    * 初始化 IndexedDB 数据库实例
    * @param {object} options - 配置选项
@@ -379,7 +383,7 @@ export function bundleComponentsSchema(options: BundleComponentsSchemaOptions = 
     })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createBundleComponent,
     getBundleComponent,
     getByBundleAndComponent,
@@ -394,7 +398,7 @@ export function bundleComponentsSchema(options: BundleComponentsSchemaOptions = 
     listByBundleId,
     listByComponentId,
     listByRole,
-  }
+  })
 }
 
 export const bundle_components = bundleComponentsStoreDefinition

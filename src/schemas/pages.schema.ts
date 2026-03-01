@@ -1,3 +1,5 @@
+// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+
 /**
  * 页面存储的名称常量
  * @constant
@@ -65,6 +67,7 @@ export interface PageDiff {
  * @property {string} module - 所属模块名称
  * @property {string} pageType - 页面类型
  * @property {string[]} tags - 页面标签数组
+ * @property {string} address - 页面地址（用于去重）
  * @property {string} url - 页面的URL地址
  * @property {string} title - 页面标题
  * @property {string} route - 页面路由路径
@@ -83,6 +86,7 @@ export interface PageRecord {
   module: string
   pageType: string
   tags: string[]
+  address: string
   url: string
   title: string
   route: string
@@ -190,6 +194,8 @@ function filterActivePages(pages: PageRecord[]): PageRecord[] {
 }
 
 export function pagesSchema(options: PagesSchemaOptions = {}) {
+  const schemaLogger = createLogger('schema:pages')
+
   /**
    * 初始化 IndexedDB 实例
    * @param {object} options - 配置选项
@@ -219,6 +225,7 @@ export function pagesSchema(options: PagesSchemaOptions = {}) {
       id: input.id ?? createPageId(),
       ts: input.ts ?? Date.now(),
       tags: input.tags ?? [],
+      address: input.address ?? input.url,
       fingerprints: input.fingerprints ?? {},
     }
 
@@ -276,6 +283,7 @@ export function pagesSchema(options: PagesSchemaOptions = {}) {
       id: current.id,
       ts: patch.ts ?? Date.now(),
       tags: patch.tags ?? current.tags ?? [],
+      address: patch.address ?? current.address ?? current.url,
       fingerprints: patch.fingerprints ?? current.fingerprints ?? {},
     }
 
@@ -299,6 +307,7 @@ export function pagesSchema(options: PagesSchemaOptions = {}) {
       ...page,
       ts: page.ts ?? Date.now(),
       tags: page.tags ?? [],
+      address: page.address ?? page.url,
       fingerprints: page.fingerprints ?? {},
     }
 
@@ -434,7 +443,7 @@ export function pagesSchema(options: PagesSchemaOptions = {}) {
     })
   }
 
-  return {
+  return wrapAsyncApiWithLogger(schemaLogger, {
     createPage,
     getPage,
     listPages,
@@ -449,5 +458,5 @@ export function pagesSchema(options: PagesSchemaOptions = {}) {
     listBySystem,
     listByPageType,
     listByTsRange,
-  }
+  })
 }
