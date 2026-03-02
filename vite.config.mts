@@ -38,10 +38,8 @@ export const sharedConfig: UserConfig = {
       dirs: [r('src/components')],
       // generate `components.d.ts` for ts support with Volar
       dts: r('src/components.d.ts'),
-      resolvers: [
-        // auto import icons
-        IconsResolver({ prefix: '' }),
-      ],
+      resolvers: [IconsResolver({ prefix: '' })],
+      directoryAsNamespace: true,
     }),
 
     // https://github.com/antfu/unplugin-icons

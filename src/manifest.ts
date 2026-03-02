@@ -14,7 +14,7 @@ export async function getManifest() {
     version: pkg.version,
     description: pkg.description,
     action: {
-      default_icon: 'assets/icon-512.png',
+      // default_icon: 'assets/icon-512.png',
       default_popup: 'dist/popup/index.html',
     },
     options_ui: {
@@ -24,7 +24,7 @@ export async function getManifest() {
     background: isFirefox
       ? { scripts: ['dist/background/index.mjs'], type: 'module' }
       : { service_worker: 'dist/background/index.mjs' },
-    icons: { 16: 'assets/icon-512.png', 48: 'assets/icon-512.png', 128: 'assets/icon-512.png' },
+    // icons: { 16: 'assets/icon-512.png', 48: 'assets/icon-512.png', 128: 'assets/icon-512.png' },
     permissions: ['tabs', 'storage', 'activeTab', 'sidePanel', 'scripting', 'downloads', 'offscreen'],
     host_permissions: ['*://*/*', '<all_urls>'],
     content_scripts: [

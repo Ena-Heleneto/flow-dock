@@ -1,6 +1,7 @@
-export type EventHandler = (...args: unknown[]) => unknown | Promise<unknown>
+export type EventHandler<TEvent = unknown, TResult = unknown> =
+  (event: TEvent) => TResult | Promise<TResult>
 
-export interface DefinedEventHandler {
+export interface DefinedEventHandler<TEvent = unknown, TResult = unknown> {
   readonly __flowDockEventHandler: true
-  readonly handler: EventHandler
+  readonly handler: EventHandler<TEvent, TResult>
 }

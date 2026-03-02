@@ -1,5 +1,5 @@
 import { createApp } from 'vue'
-import App from './DatabaseViewer.vue'
+import App from './viewer.vue'
 import { setupApp } from '~/logic/common-setup'
 import '../styles'
 

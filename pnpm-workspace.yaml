@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - dtrace-provider
+  - esbuild
+  - simple-git-hooks
+  - spawn-sync
+  - vue-demi

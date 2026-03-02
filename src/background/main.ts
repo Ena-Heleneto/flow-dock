@@ -1,5 +1,6 @@
 import { onMessage, sendMessage } from 'webext-bridge/background'
 import type { Tabs } from 'webextension-polyfill'
+import { PageSchema } from '../schemas/pages.schema'
 import { registerControllers, registerRouterEventHandlers } from './register'
 
 function openDatabase(dbName: string) {
@@ -58,6 +59,25 @@ async function readStorePreview(dbName: string, storeName: string, limit: number
     ])
 
     return { total, rows }
+  }
+  finally {
+    database.close()
+  }
+}
+
+async function countStoreRows(dbName: string, storeName: string) {
+  const database = await openDatabase(dbName)
+  try {
+    if (!database.objectStoreNames.contains(storeName))
+      return 0
+
+    const transaction = database.transaction(storeName, 'readonly')
+    const store = transaction.objectStore(storeName)
+    return await new Promise<number>((resolve, reject) => {
+      const request = store.count()
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('Failed to count rows'))
+    })
   }
   finally {
     database.close()
@@ -147,7 +167,7 @@ browser.runtime.onMessage.addListener((message: unknown) => {
   if (payload.type === 'db-viewer/initialize') {
     return (async () => {
       await Promise.all([
-        pagesSchema({ dbName }).countPages(),
+        countStoreRows(dbName, PageSchema.name),
         screenshotsSchema({ dbName }).countScreenshots(),
         screenshotLinksSchema({ dbName }).countScreenshotLinks(),
         clustersSchema({ dbName }).countClusters(),

@@ -3,12 +3,35 @@ import { useDraggable } from '@vueuse/core'
 import { computed, onMounted, ref } from 'vue'
 import { sendMessage } from 'webext-bridge/content-script'
 
+/**
+ * 用于跟踪元素是否发生过移动
+ * @type {Ref<boolean>}
+ * @default false
+ */
 const hasMoved = ref<boolean>(false)
+
+/**
+ * 记录鼠标按下时的起始位置坐标
+ * @type {Ref<{x: number, y: number} | null>}
+ * @remarks
+ * - 当鼠标按下时，存储起始位置的 x 和 y 坐标
+ * - 初始值为 null，表示还未记录位置
+ * - 用于计算鼠标拖动的距离和方向
+ */
 const startPos = ref<{ x: number, y: number } | null>(null)
+
+/**
+ * 处理保存页面的异步函数
+ * 向后台发送保存页面的消息，并根据结果进行日志记录
+ *
+ * @async
+ * @function handleSavePage
+ * @returns {Promise<void>}
+ * @throws {Error} 当消息发送失败时捕获错误并记录
+ */
 async function handleSavePage() {
-  logger.log('Button clicked!')
   try {
-    const result = await sendMessage('save-page', {}, 'background')
+    const result = await sendMessage('pages/save', {}, 'background')
     logger.success('save-page success', result)
   }
   catch (error) {
@@ -16,6 +39,12 @@ async function handleSavePage() {
   }
 }
 
+/**
+ * 获取拖拽目标元素的模板引用
+ * @type {Ref<HTMLElement | null>}
+ * @description 用于获取页面中用于拖拽操作的目标 DOM 元素的引用，
+ * 初始值为 null，当组件挂载后会绑定到对应的 HTML 元素上
+ */
 const DragTargetRef = useTemplateRef<HTMLElement | null>('DragTargetRef')
 
 /**
@@ -47,7 +76,7 @@ const DragTargetRef = useTemplateRef<HTMLElement | null>('DragTargetRef')
  * @description 清空保存的起始位置信息
  */
 const { x, y, style, isDragging } = useDraggable(DragTargetRef, {
-  initialValue: { x: 0, y: 0 },
+  initialValue: { x: 100, y: 50 },
   capture: false,
   preventDefault: false,
   stopPropagation: false,
@@ -89,10 +118,29 @@ onMounted(() => {
   const size = 40
   x.value = window.innerWidth - margin - size
   y.value = window.innerHeight - margin - size
+  void handleExistsPages()
 })
 
-// const result = await sendMessage('save-page', {}, 'background')
-await sendMessage('exists-pages')
+/**
+ * 检查页面是否存在
+ *
+ * 向后台脚本发送消息，查询指定页面是否已存在。
+ *
+ * @async
+ * @function handleExistsPages
+ * @returns {Promise<void>}
+ *
+ * @throws {Error} 当发送消息失败时捕获错误并记录
+ */
+async function handleExistsPages() {
+  try {
+    const res = await sendMessage('pages/exists', {}, 'background')
+    logger.info('exists-pages result', res)
+  }
+  catch (error: unknown) {
+    logger.error('exists-pages failed', error)
+  }
+}
 </script>
 
 <template>
@@ -111,6 +159,7 @@ await sendMessage('exists-pages')
     h="50px"
     bg="#7C3CFF hover:#6A2BFF"
   >
+    <div />
     <button
       class="flex w-10 h-10 rounded-full shadow cursor-pointer border-none"
       @click.stop="!hasMoved && handleSavePage()"

@@ -1,74 +1,73 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { KvConfigsService, isAbsoluteScreenshotCachePath } from '~/background/services/kv_configs.services'
+// import { KvConfigsService, isAbsoluteScreenshotCachePath } from '~/background/services/kv_configs.services'
 
-const form = reactive({
-  workspaceName: '',
-  apiBaseUrl: '',
-  enableDebugMode: false,
-  screenshotCachePath: '',
-})
+// const form = reactive({
+//   workspaceName: '',
+//   apiBaseUrl: '',
+//   enableDebugMode: false,
+//   screenshotCachePath: '',
+// })
 
-const submitMessage = ref('')
-const loading = ref(false)
-const kvConfigsService = new KvConfigsService()
+// const submitMessage = ref('')
+// const loading = ref(false)
+// const kvConfigsService = new KvConfigsService()
 
-async function loadSettings() {
-  loading.value = true
-  try {
-    const settings = await kvConfigsService.getGlobalSettings()
-    form.workspaceName = settings.workspaceName
-    form.apiBaseUrl = settings.apiBaseUrl
-    form.enableDebugMode = settings.enableDebugMode
-    form.screenshotCachePath = settings.screenshotCachePath
-  }
-  finally {
-    loading.value = false
-  }
-}
+// async function loadSettings() {
+//   loading.value = true
+//   try {
+//     const settings = await kvConfigsService.getGlobalSettings()
+//     form.workspaceName = settings.workspaceName
+//     form.apiBaseUrl = settings.apiBaseUrl
+//     form.enableDebugMode = settings.enableDebugMode
+//     form.screenshotCachePath = settings.screenshotCachePath
+//   }
+//   finally {
+//     loading.value = false
+//   }
+// }
 
-async function handleSubmit() {
-  if (isAbsoluteScreenshotCachePath(form.screenshotCachePath)) {
-    submitMessage.value = '不支持填写本地绝对路径，请填写“下载目录”下的相对路径，例如：flow-dock/screenshots'
-    return
-  }
+// async function handleSubmit() {
+//   if (isAbsoluteScreenshotCachePath(form.screenshotCachePath)) {
+//     submitMessage.value = '不支持填写本地绝对路径，请填写“下载目录”下的相对路径，例如：flow-dock/screenshots'
+//     return
+//   }
 
-  loading.value = true
-  try {
-    const saved = await kvConfigsService.saveGlobalSettings({
-      workspaceName: form.workspaceName,
-      apiBaseUrl: form.apiBaseUrl,
-      enableDebugMode: form.enableDebugMode,
-      screenshotCachePath: form.screenshotCachePath,
-    })
+//   loading.value = true
+//   try {
+//     const saved = await kvConfigsService.saveGlobalSettings({
+//       workspaceName: form.workspaceName,
+//       apiBaseUrl: form.apiBaseUrl,
+//       enableDebugMode: form.enableDebugMode,
+//       screenshotCachePath: form.screenshotCachePath,
+//     })
 
-    form.workspaceName = saved.workspaceName
-    form.apiBaseUrl = saved.apiBaseUrl
-    form.enableDebugMode = saved.enableDebugMode
-    form.screenshotCachePath = saved.screenshotCachePath
-    submitMessage.value = '配置已保存到数据库'
-  }
-  catch (error) {
-    submitMessage.value = `保存失败：${error instanceof Error ? error.message : String(error)}`
-  }
-  finally {
-    loading.value = false
-  }
-}
+//     form.workspaceName = saved.workspaceName
+//     form.apiBaseUrl = saved.apiBaseUrl
+//     form.enableDebugMode = saved.enableDebugMode
+//     form.screenshotCachePath = saved.screenshotCachePath
+//     submitMessage.value = '配置已保存到数据库'
+//   }
+//   catch (error) {
+//     submitMessage.value = `保存失败：${error instanceof Error ? error.message : String(error)}`
+//   }
+//   finally {
+//     loading.value = false
+//   }
+// }
 
-async function handleReset() {
-  submitMessage.value = ''
-  await loadSettings()
-}
+// async function handleReset() {
+//   submitMessage.value = ''
+//   await loadSettings()
+// }
 
-onMounted(async () => {
-  await loadSettings()
-})
+// onMounted(async () => {
+//   await loadSettings()
+// })
 </script>
 
 <template>
   <main class="mx-auto max-w-lg px-4 py-5 text-gray-700">
-    <h1 class="text-lg font-bold">
+    <!-- <h1 class="text-lg font-bold">
       全局设置
     </h1>
 
@@ -106,6 +105,6 @@ onMounted(async () => {
 
     <p v-if="submitMessage" class="mt-3">
       {{ submitMessage }}
-    </p>
+    </p> -->
   </main>
 </template>

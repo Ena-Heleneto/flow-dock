@@ -4,6 +4,7 @@ import { isDefinedEventHandler } from '../utils/define-event-handler.util'
 type ControllerMethod = (...args: unknown[]) => unknown
 type ControllerInstance = Record<string, ControllerMethod>
 type ControllerClass = new () => ControllerInstance
+type DirectEventHandler = (event: unknown) => unknown | Promise<unknown>
 
 function toKebabCase(value: string) {
   return value
@@ -19,10 +20,21 @@ function toRouteCase(value: string) {
     .join('/')
 }
 
+function normalizeRouterBaseName(modulePath: string) {
+  const normalizedPath = modulePath.replace(/\\/g, '/').replace(/\.router\.ts$/, '')
+
+  if (normalizedPath.startsWith('./routers/'))
+    return normalizedPath.replace(/^\.\/routers\//, '')
+
+  const routersSegmentIndex = normalizedPath.lastIndexOf('/routers/')
+  if (routersSegmentIndex >= 0)
+    return normalizedPath.slice(routersSegmentIndex + '/routers/'.length)
+
+  return normalizedPath.replace(/^\.\//, '')
+}
+
 function toRouterMessageName(modulePath: string, exportName: string) {
-  const baseName = modulePath
-    .replace(/^\.\/routers\//, '')
-    .replace(/\.router\.ts$/, '')
+  const baseName = normalizeRouterBaseName(modulePath)
 
   if (exportName === 'default')
     return toRouteCase(baseName)
@@ -92,7 +104,14 @@ export function registerRouterEventHandlers() {
 
   Object.entries(modules).forEach(([modulePath, moduleExports]) => {
     Object.entries(moduleExports).forEach(([exportName, exportedMember]) => {
-      if (!isDefinedEventHandler(exportedMember))
+      let handler: DirectEventHandler | undefined
+
+      if (isDefinedEventHandler(exportedMember))
+        handler = exportedMember.handler as DirectEventHandler
+      else if (typeof exportedMember === 'function')
+        handler = exportedMember as DirectEventHandler
+
+      if (!handler)
         return
 
       const messageName = toRouterMessageName(modulePath, exportName)
@@ -104,7 +123,7 @@ export function registerRouterEventHandlers() {
       registeredEventNames.add(messageName)
 
       onMessage(messageName as never, async (...args: unknown[]) => {
-        return await exportedMember.handler(...args)
+        return await handler(args[0])
       })
     })
   })
