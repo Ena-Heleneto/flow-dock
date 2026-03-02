@@ -1,6 +1,68 @@
 import { onMessage, sendMessage } from 'webext-bridge/background'
 import type { Tabs } from 'webextension-polyfill'
-import { registerControllers } from './register'
+import { registerControllers, registerRouterEventHandlers } from './register'
+
+function openDatabase(dbName: string) {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(dbName)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error ?? new Error(`Failed to open DB: ${dbName}`))
+  })
+}
+
+function readPreviewRows(store: IDBObjectStore, limit: number) {
+  return new Promise<unknown[]>((resolve, reject) => {
+    const records: unknown[] = []
+    const request = store.openCursor()
+
+    request.onsuccess = () => {
+      const cursor = request.result
+      if (!cursor || records.length >= limit) {
+        resolve(records)
+        return
+      }
+
+      records.push(cursor.value)
+      cursor.continue()
+    }
+
+    request.onerror = () => reject(request.error ?? new Error('Failed to read preview rows'))
+  })
+}
+
+async function listStores(dbName: string) {
+  const database = await openDatabase(dbName)
+  try {
+    return Array.from(database.objectStoreNames)
+  }
+  finally {
+    database.close()
+  }
+}
+
+async function readStorePreview(dbName: string, storeName: string, limit: number) {
+  const database = await openDatabase(dbName)
+  try {
+    if (!database.objectStoreNames.contains(storeName))
+      return { total: 0, rows: [] as unknown[] }
+
+    const transaction = database.transaction(storeName, 'readonly')
+    const store = transaction.objectStore(storeName)
+    const [total, rows] = await Promise.all([
+      new Promise<number>((resolve, reject) => {
+        const request = store.count()
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error ?? new Error('Failed to count rows'))
+      }),
+      readPreviewRows(store, limit),
+    ])
+
+    return { total, rows }
+  }
+  finally {
+    database.close()
+  }
+}
 
 // only on dev mode
 if (import.meta.hot) {
@@ -30,6 +92,7 @@ browser.runtime.onInstalled.addListener((): void => {
 
 let previousTabId = 0
 registerControllers()
+registerRouterEventHandlers()
 
 // communication example: send previous tab title from background page
 // see shim.d.ts for type declaration
@@ -65,5 +128,65 @@ onMessage('get-current-tab', async () => {
     return {
       title: undefined,
     }
+  }
+})
+
+browser.runtime.onMessage.addListener((message: unknown) => {
+  const payload = message as {
+    type?: string
+    dbName?: string
+    storeName?: string
+    limit?: number
+  }
+
+  if (!payload?.type?.startsWith('db-viewer/'))
+    return
+
+  const dbName = payload.dbName || 'flow-dock-dev'
+
+  if (payload.type === 'db-viewer/initialize') {
+    return (async () => {
+      await Promise.all([
+        pagesSchema({ dbName }).countPages(),
+        screenshotsSchema({ dbName }).countScreenshots(),
+        screenshotLinksSchema({ dbName }).countScreenshotLinks(),
+        clustersSchema({ dbName }).countClusters(),
+        componentsSchema({ dbName }).countComponents(),
+        bundleSchema({ dbName }).countBundles(),
+        bundleComponentsSchema({ dbName }).countBundleComponents(),
+        pageBundlesSchema({ dbName }).countPageBundles(),
+        pageComponentsSchema({ dbName }).countPageComponents(),
+        kvConfigsSchema({ dbName }).countConfigs(),
+        clusterLinksSchema({ dbName }).countClusterLinks(),
+      ])
+
+      return { ok: true }
+    })().catch((error: unknown) => ({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    }))
+  }
+
+  if (payload.type === 'db-viewer/stores') {
+    return listStores(dbName)
+      .then(stores => ({ ok: true, stores }))
+      .catch((error: unknown) => ({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }))
+  }
+
+  if (payload.type === 'db-viewer/rows') {
+    const storeName = payload.storeName
+    if (!storeName)
+      return Promise.resolve({ ok: false, error: 'storeName is required' })
+
+    const limit = Math.max(1, Math.floor(payload.limit ?? 50))
+    return readStorePreview(dbName, storeName, limit)
+      .then(data => ({ ok: true, ...data }))
+      .catch((error: unknown) => ({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }))
   }
 })

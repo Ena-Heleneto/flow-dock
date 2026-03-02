@@ -1,4 +1,6 @@
 // import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+import { IdbTransactionUtil } from '../utils/transaction.util'
+import type { IdbTransactionContext } from '../utils/transaction.util'
 
 /**
  * 组件存储的名称常量
@@ -153,16 +155,20 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
   /**
    * 初始化 IndexedDB 实例用于存储组件数据
    * @param {object} options - 配置选项
-   * @param {string} [options.dbName='flow-dock'] - 数据库名称，默认为 'flow-dock'
+   * @param {string} [options.dbName='flow-dock-dev'] - 数据库名称，默认为 'flow-dock-dev'
    * @param {number} [options.version=1] - 数据库版本号，默认为 1
    * @param {Array} options.stores - 数据库存储定义数组，包含 componentsStoreDefinition
    * @returns {object} IndexedDB 实例对象，用于执行数据库操作
    */
   const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock',
+    dbName: options.dbName ?? 'flow-dock-dev',
     version: options.version ?? 1,
     stores: [componentsStoreDefinition],
   })
+
+  function getTxStore(transaction?: IdbTransactionContext) {
+    return transaction?.getStore(COMPONENTS_STORE_NAME)
+  }
 
   /**
    * 创建一个新的组件记录
@@ -173,7 +179,7 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * @param input.lastSeen - 最后发现时间戳，默认为当前时间
    * @returns 返回创建的组件记录
    */
-  async function createComponent(input: CreateComponentInput): Promise<ComponentRecord> {
+  async function createComponent(input: CreateComponentInput, transaction?: IdbTransactionContext): Promise<ComponentRecord> {
     const now = Date.now()
     const component: ComponentRecord = {
       ...input,
@@ -183,7 +189,12 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
       lastSeen: input.lastSeen ?? now,
     }
 
-    await idb.add(COMPONENTS_STORE_NAME, component)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.add(component))
+    else
+      await idb.add(COMPONENTS_STORE_NAME, component)
+
     return component
   }
 
@@ -194,8 +205,12 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * @returns 返回匹配的组件记录，如果未找到或组件已被删除且includeDeleted为false时返回undefined
    * @async
    */
-  async function getComponent(id: ComponentId, includeDeleted = false): Promise<ComponentRecord | undefined> {
-    const component = await idb.get<ComponentRecord>(COMPONENTS_STORE_NAME, id)
+  async function getComponent(id: ComponentId, includeDeleted = false, transaction?: IdbTransactionContext): Promise<ComponentRecord | undefined> {
+    const txStore = getTxStore(transaction)
+    const component = txStore
+      ? await IdbTransactionUtil.requestToPromise<ComponentRecord | undefined>(txStore.get(id))
+      : await idb.get<ComponentRecord>(COMPONENTS_STORE_NAME, id)
+
     if (!includeDeleted && component && !isActiveComponent(component))
       return undefined
 
@@ -206,8 +221,12 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * 获取所有活跃的组件列表
    * @returns {Promise<ComponentRecord[]>} 按最后访问时间倒序排列的活跃组件记录数组
    */
-  async function listComponents(): Promise<ComponentRecord[]> {
-    const components = await idb.getAll<ComponentRecord>(COMPONENTS_STORE_NAME)
+  async function listComponents(transaction?: IdbTransactionContext): Promise<ComponentRecord[]> {
+    const txStore = getTxStore(transaction)
+    const components = txStore
+      ? await IdbTransactionUtil.requestToPromise<ComponentRecord[]>(txStore.getAll())
+      : await idb.getAll<ComponentRecord>(COMPONENTS_STORE_NAME)
+
     return filterActiveComponents(components).sort((a, b) => b.lastSeen - a.lastSeen)
   }
 
@@ -224,8 +243,8 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * - lastSeen字段自动更新为当前时间戳
    * - 更新后的记录将被持久化到IndexedDB数据库中
    */
-  async function updateComponent(id: ComponentId, patch: UpdateComponentInput): Promise<ComponentRecord | undefined> {
-    const current = await getComponent(id)
+  async function updateComponent(id: ComponentId, patch: UpdateComponentInput, transaction?: IdbTransactionContext): Promise<ComponentRecord | undefined> {
+    const current = await getComponent(id, false, transaction)
     if (!current)
       return undefined
 
@@ -238,7 +257,12 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
       lastSeen: patch.lastSeen ?? Date.now(),
     }
 
-    await idb.put(COMPONENTS_STORE_NAME, updated)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.put(updated))
+    else
+      await idb.put(COMPONENTS_STORE_NAME, updated)
+
     return updated
   }
 
@@ -254,7 +278,7 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * - 如果组件缺少 `lastSeen` 时间戳，将设置为当前时间
    * - 该函数会将标准化后的记录异步保存到 IndexedDB 中
    */
-  async function upsertComponent(component: ComponentRecord): Promise<ComponentRecord> {
+  async function upsertComponent(component: ComponentRecord, transaction?: IdbTransactionContext): Promise<ComponentRecord> {
     const now = Date.now()
     const normalized: ComponentRecord = {
       ...component,
@@ -263,7 +287,12 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
       lastSeen: component.lastSeen ?? now,
     }
 
-    await idb.put(COMPONENTS_STORE_NAME, normalized)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.put(normalized))
+    else
+      await idb.put(COMPONENTS_STORE_NAME, normalized)
+
     return normalized
   }
 
@@ -273,8 +302,8 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * @returns 返回更新后的组件记录，如果组件不存在则返回undefined
    * @description 将组件标记为已删除，通过设置deletedAt和lastSeen时间戳来实现软删除
    */
-  async function softDeleteComponent(id: ComponentId): Promise<ComponentRecord | undefined> {
-    return updateComponent(id, { deletedAt: Date.now(), lastSeen: Date.now() })
+  async function softDeleteComponent(id: ComponentId, transaction?: IdbTransactionContext): Promise<ComponentRecord | undefined> {
+    return updateComponent(id, { deletedAt: Date.now(), lastSeen: Date.now() }, transaction)
   }
 
   /**
@@ -282,8 +311,8 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * @param id - 组件ID
    * @returns 返回恢复后的组件记录，如果组件不存在则返回undefined
    */
-  async function restoreComponent(id: ComponentId): Promise<ComponentRecord | undefined> {
-    return updateComponent(id, { deletedAt: undefined, lastSeen: Date.now() })
+  async function restoreComponent(id: ComponentId, transaction?: IdbTransactionContext): Promise<ComponentRecord | undefined> {
+    return updateComponent(id, { deletedAt: undefined, lastSeen: Date.now() }, transaction)
   }
 
   /**
@@ -293,8 +322,12 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * @returns 返回一个 Promise，当清空操作完成时 resolve
    * @throws 如果数据库操作失败会抛出异常
    */
-  async function clearComponents(): Promise<void> {
-    await idb.clear(COMPONENTS_STORE_NAME)
+  async function clearComponents(transaction?: IdbTransactionContext): Promise<void> {
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.clear())
+    else
+      await idb.clear(COMPONENTS_STORE_NAME)
   }
 
   /**
@@ -358,8 +391,8 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
    * @param id - 组件的唯一标识符
    * @returns 返回更新后的组件记录，如果组件不存在则返回 undefined
    */
-  async function touchComponent(id: ComponentId): Promise<ComponentRecord | undefined> {
-    return updateComponent(id, { lastSeen: Date.now() })
+  async function touchComponent(id: ComponentId, transaction?: IdbTransactionContext): Promise<ComponentRecord | undefined> {
+    return updateComponent(id, { lastSeen: Date.now() }, transaction)
   }
 
   return wrapAsyncApiWithLogger(schemaLogger, {
@@ -378,3 +411,5 @@ export function componentsSchema(options: ComponentsSchemaOptions = {}) {
     touchComponent,
   })
 }
+
+export const components = componentsStoreDefinition

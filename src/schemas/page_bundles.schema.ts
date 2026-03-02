@@ -140,13 +140,13 @@ export function pageBundlesSchema(options: PageBundlesSchemaOptions = {}) {
   /**
    * 初始化 IndexedDB 实例
    * @param {object} options - 配置选项
-   * @param {string} [options.dbName='flow-dock'] - 数据库名称，默认为 'flow-dock'
+   * @param {string} [options.dbName='flow-dock-dev'] - 数据库名称，默认为 'flow-dock-dev'
    * @param {number} [options.version=1] - 数据库版本号，默认为 1
    * @param {Array} options.stores - 数据库存储空间定义数组，包含页面包裹存储定义
    * @returns {IdbInstance} 返回初始化后的 IndexedDB 实例
    */
   const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock',
+    dbName: options.dbName ?? 'flow-dock-dev',
     version: options.version ?? 1,
     stores: [pageBundlesStoreDefinition],
   })

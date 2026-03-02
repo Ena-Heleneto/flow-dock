@@ -1,201 +1,111 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
+import { KvConfigsService, isAbsoluteScreenshotCachePath } from '~/background/services/kv_configs.services'
 
-const dbName = 'flow-dock'
-const previewLimit = 50
+const form = reactive({
+  workspaceName: '',
+  apiBaseUrl: '',
+  enableDebugMode: false,
+  screenshotCachePath: '',
+})
 
-const loadingStores = ref(false)
-const loadingRows = ref(false)
-const errorMessage = ref('')
+const submitMessage = ref('')
+const loading = ref(false)
+const kvConfigsService = new KvConfigsService()
 
-const stores = ref<string[]>([])
-const selectedStore = ref('')
-const totalRows = ref(0)
-const rows = ref<unknown[]>([])
-
-function requestToPromise<T>(request: IDBRequest<T>) {
-  return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'))
-  })
-}
-
-function openDatabase() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(dbName)
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error(`Failed to open DB: ${dbName}`))
-  })
-}
-
-function readPreviewRows(store: IDBObjectStore, limit: number) {
-  return new Promise<unknown[]>((resolve, reject) => {
-    const records: unknown[] = []
-    const request = store.openCursor()
-
-    request.onsuccess = () => {
-      const cursor = request.result
-      if (!cursor || records.length >= limit) {
-        resolve(records)
-        return
-      }
-
-      records.push(cursor.value)
-      cursor.continue()
-    }
-
-    request.onerror = () => reject(request.error ?? new Error('Failed to read preview rows'))
-  })
-}
-
-function formatRow(row: unknown) {
+async function loadSettings() {
+  loading.value = true
   try {
-    return JSON.stringify(row, null, 2)
-  }
-  catch {
-    return String(row)
-  }
-}
-
-async function refreshStores() {
-  loadingStores.value = true
-  errorMessage.value = ''
-
-  try {
-    const database = await openDatabase()
-    const names = Array.from(database.objectStoreNames)
-    stores.value = names
-
-    if (!names.length) {
-      selectedStore.value = ''
-      totalRows.value = 0
-      rows.value = []
-    }
-    else if (!names.includes(selectedStore.value)) {
-      selectedStore.value = names[0] ?? ''
-    }
-
-    database.close()
-  }
-  catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
+    const settings = await kvConfigsService.getGlobalSettings()
+    form.workspaceName = settings.workspaceName
+    form.apiBaseUrl = settings.apiBaseUrl
+    form.enableDebugMode = settings.enableDebugMode
+    form.screenshotCachePath = settings.screenshotCachePath
   }
   finally {
-    loadingStores.value = false
+    loading.value = false
   }
 }
 
-async function refreshCurrentStore() {
-  if (!selectedStore.value) {
-    totalRows.value = 0
-    rows.value = []
+async function handleSubmit() {
+  if (isAbsoluteScreenshotCachePath(form.screenshotCachePath)) {
+    submitMessage.value = '不支持填写本地绝对路径，请填写“下载目录”下的相对路径，例如：flow-dock/screenshots'
     return
   }
 
-  loadingRows.value = true
-  errorMessage.value = ''
-
+  loading.value = true
   try {
-    const database = await openDatabase()
-    const transaction = database.transaction(selectedStore.value, 'readonly')
-    const store = transaction.objectStore(selectedStore.value)
+    const saved = await kvConfigsService.saveGlobalSettings({
+      workspaceName: form.workspaceName,
+      apiBaseUrl: form.apiBaseUrl,
+      enableDebugMode: form.enableDebugMode,
+      screenshotCachePath: form.screenshotCachePath,
+    })
 
-    const [count, preview] = await Promise.all([
-      requestToPromise<number>(store.count()),
-      readPreviewRows(store, previewLimit),
-    ])
-
-    totalRows.value = count
-    rows.value = preview
-    database.close()
+    form.workspaceName = saved.workspaceName
+    form.apiBaseUrl = saved.apiBaseUrl
+    form.enableDebugMode = saved.enableDebugMode
+    form.screenshotCachePath = saved.screenshotCachePath
+    submitMessage.value = '配置已保存到数据库'
   }
   catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error)
+    submitMessage.value = `保存失败：${error instanceof Error ? error.message : String(error)}`
   }
   finally {
-    loadingRows.value = false
+    loading.value = false
   }
 }
 
-watch(selectedStore, async () => {
-  await refreshCurrentStore()
-})
+async function handleReset() {
+  submitMessage.value = ''
+  await loadSettings()
+}
 
 onMounted(async () => {
-  await refreshStores()
-  await refreshCurrentStore()
+  await loadSettings()
 })
 </script>
 
 <template>
-  <main class="px-4 py-6 text-gray-700 dark:text-gray-200">
-    <div class="text-center">
-      <div class="text-lg font-semibold">
-        Database Viewer
+  <main class="mx-auto max-w-lg px-4 py-5 text-gray-700">
+    <h1 class="text-lg font-bold">
+      全局设置
+    </h1>
+
+    <form class="mt-4 flex flex-col gap-3" @submit.prevent="handleSubmit">
+      <label class="flex flex-col gap-1">
+        <span>工作区名称</span>
+        <input v-model="form.workspaceName" type="text" placeholder="请输入名称">
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span>API 地址</span>
+        <input v-model="form.apiBaseUrl" type="url" placeholder="https://example.com/api">
+      </label>
+
+      <label class="flex items-center gap-2">
+        <input v-model="form.enableDebugMode" type="checkbox">
+        <span>启用调试模式</span>
+      </label>
+
+      <label class="flex flex-col gap-1">
+        <span>截图缓存位置（相对下载目录）</span>
+        <input v-model="form.screenshotCachePath" type="text" placeholder="flow-dock/screenshots">
+        <span class="text-xs opacity-70">示例：flow-dock/screenshots（不支持 /home/... 或 C:\\... 绝对路径）</span>
+      </label>
+
+      <div class="mt-2 flex gap-2">
+        <button class="btn" :disabled="loading" type="submit">
+          {{ loading ? '保存中...' : '提交' }}
+        </button>
+        <button class="btn" :disabled="loading" type="button" @click="handleReset">
+          还原
+        </button>
       </div>
-      <div class="opacity-70 text-sm mt-1">
-        DB: {{ dbName }}
-      </div>
-    </div>
+    </form>
 
-    <div class="mt-4 flex items-center gap-2">
-      <button class="btn" :disabled="loadingStores" @click="refreshStores">
-        {{ loadingStores ? 'Refreshing tables...' : 'Refresh Tables' }}
-      </button>
-      <button class="btn" :disabled="loadingRows || !selectedStore" @click="refreshCurrentStore">
-        {{ loadingRows ? 'Refreshing rows...' : 'Refresh Rows' }}
-      </button>
-    </div>
-
-    <div v-if="errorMessage" class="mt-3 text-sm text-red-600">
-      {{ errorMessage }}
-    </div>
-
-    <div class="mt-4 grid grid-cols-[220px_1fr] gap-4">
-      <section class="border border-gray-300 rounded p-2">
-        <div class="font-medium mb-2">
-          Tables ({{ stores.length }})
-        </div>
-        <div v-if="!stores.length" class="text-sm opacity-60">
-          No object stores found.
-        </div>
-        <ul v-else class="space-y-1 max-h-[70vh] overflow-auto">
-          <li v-for="name in stores" :key="name">
-            <button
-              class="w-full text-left px-2 py-1 rounded border border-gray-300"
-              :class="selectedStore === name ? 'font-semibold' : ''"
-              @click="selectedStore = name"
-            >
-              {{ name }}
-            </button>
-          </li>
-        </ul>
-      </section>
-
-      <section class="border border-gray-300 rounded p-3">
-        <div class="flex items-center justify-between">
-          <div class="font-medium">
-            {{ selectedStore || 'No table selected' }}
-          </div>
-          <div class="text-sm opacity-70">
-            Total: {{ totalRows }}
-          </div>
-        </div>
-
-        <div class="mt-2 text-xs opacity-70">
-          Preview: first {{ previewLimit }} rows
-        </div>
-
-        <div v-if="selectedStore && !rows.length" class="mt-3 text-sm opacity-60">
-          No rows in this table.
-        </div>
-
-        <ul v-else class="mt-3 space-y-2 max-h-[70vh] overflow-auto">
-          <li v-for="(row, idx) in rows" :key="idx" class="border border-gray-300 rounded p-2">
-            <pre class="whitespace-pre-wrap break-all text-xs">{{ formatRow(row) }}</pre>
-          </li>
-        </ul>
-      </section>
-    </div>
+    <p v-if="submitMessage" class="mt-3">
+      {{ submitMessage }}
+    </p>
   </main>
 </template>

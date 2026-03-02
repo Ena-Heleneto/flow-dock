@@ -30,7 +30,7 @@ export const sharedConfig: UserConfig = {
         { consola: [['default', 'consola']] },
       ],
       dts: r('src/auto-imports.d.ts'),
-      dirs: ['composables', 'schemas', 'utils'],
+      dirs: ['composables', 'schemas', 'utils', 'types', 'background/services'],
     }),
 
     // https://github.com/antfu/unplugin-vue-components
@@ -84,8 +84,10 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       input: {
         options: r('src/database/index.html'),
+        globalSettings: r('src/options/index.html'),
         popup: r('src/popup/index.html'),
         sidepanel: r('src/sidepanel/index.html'),
+        offscreen: r('src/offscreen/index.html'),
       },
     },
   },

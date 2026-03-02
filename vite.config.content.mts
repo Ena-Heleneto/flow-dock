@@ -20,7 +20,7 @@ export default defineConfig({
     outDir: r('extension/dist/contentScripts'),
     cssCodeSplit: true,
     emptyOutDir: false,
-    sourcemap: isDev ? 'inline' : false,
+    sourcemap: false,
     lib: {
       entry: r('src/contentScripts/index.ts'),
       name: packageJson.name,
@@ -28,9 +28,15 @@ export default defineConfig({
       cssFileName: 'style',
     },
     rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.message.includes('Multiple conflicting contents for sourcemap source'))
+          return
+        warn(warning)
+      },
       output: {
         entryFileNames: 'index.global.js',
         extend: true,
+        sourcemapExcludeSources: true,
       },
     },
   },

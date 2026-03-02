@@ -140,13 +140,13 @@ export function bundleComponentsSchema(options: BundleComponentsSchemaOptions = 
   /**
    * 初始化 IndexedDB 数据库实例
    * @param {object} options - 配置选项
-   * @param {string} [options.dbName='flow-dock'] - 数据库名称，默认为 'flow-dock'
+   * @param {string} [options.dbName='flow-dock-dev'] - 数据库名称，默认为 'flow-dock-dev'
    * @param {number} [options.version=1] - 数据库版本号，默认为 1
    * @param {Array} options.stores - 存储对象定义数组，包含 bundleComponentsStoreDefinition
    * @returns {IdbInstance} 返回 IndexedDB 实例，用于执行数据库操作
    */
   const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock',
+    dbName: options.dbName ?? 'flow-dock-dev',
     version: options.version ?? 1,
     stores: [bundleComponentsStoreDefinition],
   })

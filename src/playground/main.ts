@@ -1,1 +1,1 @@
-import '~/contentScripts/index'
+export {}

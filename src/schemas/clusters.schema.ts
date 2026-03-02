@@ -1,4 +1,6 @@
 // import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+import { IdbTransactionUtil } from '../utils/transaction.util'
+import type { IdbTransactionContext } from '../utils/transaction.util'
 
 /**
  * 集群存储的名称常量
@@ -150,16 +152,20 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
   /**
    * 初始化 IndexedDB 数据库实例
    * @param {object} options - 配置选项
-   * @param {string} [options.dbName='flow-dock'] - 数据库名称，默认为 'flow-dock'
+   * @param {string} [options.dbName='flow-dock-dev'] - 数据库名称，默认为 'flow-dock-dev'
    * @param {number} [options.version=1] - 数据库版本号，默认为 1
    * @param {Array} options.stores - 数据库存储对象定义数组，包含集群相关的存储定义
    * @returns {IDB} IndexedDB 数据库实例对象，用于后续的数据库操作
    */
   const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock',
+    dbName: options.dbName ?? 'flow-dock-dev',
     version: options.version ?? 1,
     stores: [clustersStoreDefinition],
   })
+
+  function getTxStore(transaction?: IdbTransactionContext) {
+    return transaction?.getStore(CLUSTERS_STORE_NAME)
+  }
 
   /**
    * 创建一个新的集群记录
@@ -171,7 +177,7 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @param input.pageCount - 集群中的页面数量，默认为0
    * @returns Promise<ClusterRecord> - 返回创建后的集群记录对象
    */
-  async function createCluster(input: CreateClusterInput): Promise<ClusterRecord> {
+  async function createCluster(input: CreateClusterInput, transaction?: IdbTransactionContext): Promise<ClusterRecord> {
     const record: ClusterRecord = {
       ...input,
       id: input.id ?? createClusterId(),
@@ -181,7 +187,12 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
       pageCount: input.pageCount ?? 0,
     }
 
-    await idb.add(CLUSTERS_STORE_NAME, record)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.add(record))
+    else
+      await idb.add(CLUSTERS_STORE_NAME, record)
+
     return record
   }
 
@@ -191,8 +202,12 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @param includeDeleted - 是否包含已删除的集群，默认为false
    * @returns 返回集群记录，如果集群不存在或已删除（当includeDeleted为false时）则返回undefined
    */
-  async function getCluster(id: ClusterId, includeDeleted = false): Promise<ClusterRecord | undefined> {
-    const record = await idb.get<ClusterRecord>(CLUSTERS_STORE_NAME, id)
+  async function getCluster(id: ClusterId, includeDeleted = false, transaction?: IdbTransactionContext): Promise<ClusterRecord | undefined> {
+    const txStore = getTxStore(transaction)
+    const record = txStore
+      ? await IdbTransactionUtil.requestToPromise<ClusterRecord | undefined>(txStore.get(id))
+      : await idb.get<ClusterRecord>(CLUSTERS_STORE_NAME, id)
+
     if (!includeDeleted && record && !isActiveCluster(record))
       return undefined
 
@@ -204,8 +219,12 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @returns 返回按时间戳倒序排列的活跃集群记录数组
    * @throws 如果数据库查询失败，会抛出异常
    */
-  async function listClusters(): Promise<ClusterRecord[]> {
-    const records = await idb.getAll<ClusterRecord>(CLUSTERS_STORE_NAME)
+  async function listClusters(transaction?: IdbTransactionContext): Promise<ClusterRecord[]> {
+    const txStore = getTxStore(transaction)
+    const records = txStore
+      ? await IdbTransactionUtil.requestToPromise<ClusterRecord[]>(txStore.getAll())
+      : await idb.getAll<ClusterRecord>(CLUSTERS_STORE_NAME)
+
     return filterActiveClusters(records).sort((a, b) => b.ts - a.ts)
   }
 
@@ -215,8 +234,8 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @param patch - 集群更新数据
    * @returns 更新后的集群记录，如果集群不存在则返回 undefined
    */
-  async function updateCluster(id: ClusterId, patch: UpdateClusterInput): Promise<ClusterRecord | undefined> {
-    const current = await getCluster(id)
+  async function updateCluster(id: ClusterId, patch: UpdateClusterInput, transaction?: IdbTransactionContext): Promise<ClusterRecord | undefined> {
+    const current = await getCluster(id, false, transaction)
     if (!current)
       return undefined
 
@@ -227,7 +246,12 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
       ts: patch.ts ?? Date.now(),
     }
 
-    await idb.put(CLUSTERS_STORE_NAME, updated)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.put(updated))
+    else
+      await idb.put(CLUSTERS_STORE_NAME, updated)
+
     return updated
   }
 
@@ -242,7 +266,7 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * - 如果未提供 componentCount、bundleCount 或 pageCount，则默认设置为 0
    * 然后将规范化后的记录存储到 IndexedDB 中
    */
-  async function upsertCluster(record: ClusterRecord): Promise<ClusterRecord> {
+  async function upsertCluster(record: ClusterRecord, transaction?: IdbTransactionContext): Promise<ClusterRecord> {
     const normalized: ClusterRecord = {
       ...record,
       id: record.id ?? createClusterId(),
@@ -252,7 +276,12 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
       pageCount: record.pageCount ?? 0,
     }
 
-    await idb.put(CLUSTERS_STORE_NAME, normalized)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.put(normalized))
+    else
+      await idb.put(CLUSTERS_STORE_NAME, normalized)
+
     return normalized
   }
 
@@ -264,8 +293,8 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @param id - 集群的唯一标识符
    * @returns 返回更新后的集群记录，如果更新失败则返回 undefined
    */
-  async function softDeleteCluster(id: ClusterId): Promise<ClusterRecord | undefined> {
-    return updateCluster(id, { deletedAt: Date.now(), ts: Date.now() })
+  async function softDeleteCluster(id: ClusterId, transaction?: IdbTransactionContext): Promise<ClusterRecord | undefined> {
+    return updateCluster(id, { deletedAt: Date.now(), ts: Date.now() }, transaction)
   }
 
   /**
@@ -273,8 +302,8 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @param id - 集群ID
    * @returns 返回更新后的集群记录，如果集群不存在则返回 undefined
    */
-  async function restoreCluster(id: ClusterId): Promise<ClusterRecord | undefined> {
-    return updateCluster(id, { deletedAt: undefined, ts: Date.now() })
+  async function restoreCluster(id: ClusterId, transaction?: IdbTransactionContext): Promise<ClusterRecord | undefined> {
+    return updateCluster(id, { deletedAt: undefined, ts: Date.now() }, transaction)
   }
 
   /**
@@ -282,16 +311,24 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @param id - 要删除的集群ID
    * @returns 返回一个Promise，当集群删除完成时resolve
    */
-  async function removeCluster(id: ClusterId): Promise<void> {
-    await idb.remove(CLUSTERS_STORE_NAME, id)
+  async function removeCluster(id: ClusterId, transaction?: IdbTransactionContext): Promise<void> {
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.delete(id))
+    else
+      await idb.remove(CLUSTERS_STORE_NAME, id)
   }
 
   /**
    * 清空集群存储中的所有数据
    * @returns 返回一个在清空操作完成时解决的Promise
    */
-  async function clearClusters(): Promise<void> {
-    await idb.clear(CLUSTERS_STORE_NAME)
+  async function clearClusters(transaction?: IdbTransactionContext): Promise<void> {
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.clear())
+    else
+      await idb.clear(CLUSTERS_STORE_NAME)
   }
 
   /**
@@ -360,8 +397,8 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
    * @param id - 集群ID
    * @returns 返回更新后的集群记录，如果集群不存在则返回undefined
    */
-  async function markExported(id: ClusterId): Promise<ClusterRecord | undefined> {
-    return updateCluster(id, { exportedAt: Date.now(), ts: Date.now() })
+  async function markExported(id: ClusterId, transaction?: IdbTransactionContext): Promise<ClusterRecord | undefined> {
+    return updateCluster(id, { exportedAt: Date.now(), ts: Date.now() }, transaction)
   }
 
   return wrapAsyncApiWithLogger(schemaLogger, {

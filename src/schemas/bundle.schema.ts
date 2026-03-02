@@ -1,4 +1,6 @@
 // import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+import { IdbTransactionUtil } from '../utils/transaction.util'
+import type { IdbTransactionContext } from '../utils/transaction.util'
 
 /**
  * 用于存储打包数据的存储区名称
@@ -160,16 +162,20 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * 初始化 IndexedDB 数据库实例
    * @description 创建一个 IndexedDB 数据库连接，用于存储和管理 bundle 数据的持久化
    * @param {object} options - 配置选项
-   * @param {string} [options.dbName='flow-dock'] - 数据库名称，默认为 'flow-dock'
+   * @param {string} [options.dbName='flow-dock-dev'] - 数据库名称，默认为 'flow-dock-dev'
    * @param {number} [options.version=1] - 数据库版本号，默认为 1
    * @param {Array} options.stores - 数据库存储对象定义数组，包含 bundlesStoreDefinition
    * @returns {IdbInstance} 返回 IndexedDB 数据库实例，可用于数据的增删改查操作
    */
   const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock',
+    dbName: options.dbName ?? 'flow-dock-dev',
     version: options.version ?? 1,
     stores: [bundlesStoreDefinition],
   })
+
+  function getTxStore(transaction?: IdbTransactionContext) {
+    return transaction?.getStore(BUNDLES_STORE_NAME)
+  }
 
   /**
    * 创建一个新的Bundle记录
@@ -177,7 +183,7 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * @returns 返回创建后的Bundle记录
    * @throws 如果数据库操作失败，将抛出异常
    */
-  async function createBundle(input: CreateBundleInput): Promise<BundleRecord> {
+  async function createBundle(input: CreateBundleInput, transaction?: IdbTransactionContext): Promise<BundleRecord> {
     const now = Date.now()
     const bundle: BundleRecord = {
       ...input,
@@ -188,7 +194,12 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
       updatedAt: input.updatedAt ?? now,
     }
 
-    await idb.add(BUNDLES_STORE_NAME, bundle)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.add(bundle))
+    else
+      await idb.add(BUNDLES_STORE_NAME, bundle)
+
     return bundle
   }
 
@@ -199,8 +210,12 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * @returns 返回匹配的数据包记录，如果未找到或被排除则返回undefined
    * @remarks 当includeDeleted为false时，如果数据包已被删除（非活跃状态），将返回undefined
    */
-  async function getBundle(id: BundleId, includeDeleted = false): Promise<BundleRecord | undefined> {
-    const bundle = await idb.get<BundleRecord>(BUNDLES_STORE_NAME, id)
+  async function getBundle(id: BundleId, includeDeleted = false, transaction?: IdbTransactionContext): Promise<BundleRecord | undefined> {
+    const txStore = getTxStore(transaction)
+    const bundle = txStore
+      ? await IdbTransactionUtil.requestToPromise<BundleRecord | undefined>(txStore.get(id))
+      : await idb.get<BundleRecord>(BUNDLES_STORE_NAME, id)
+
     if (!includeDeleted && bundle && !isActiveBundle(bundle))
       return undefined
 
@@ -215,8 +230,12 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    *
    * @returns {Promise<BundleRecord[]>} 活跃 Bundle 记录数组，按更新时间降序排列
    */
-  async function listBundles(): Promise<BundleRecord[]> {
-    const bundles = await idb.getAll<BundleRecord>(BUNDLES_STORE_NAME)
+  async function listBundles(transaction?: IdbTransactionContext): Promise<BundleRecord[]> {
+    const txStore = getTxStore(transaction)
+    const bundles = txStore
+      ? await IdbTransactionUtil.requestToPromise<BundleRecord[]>(txStore.getAll())
+      : await idb.getAll<BundleRecord>(BUNDLES_STORE_NAME)
+
     return filterActiveBundles(bundles).sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
@@ -232,8 +251,8 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * - updatedAt字段自动设置为当前时间戳（除非patch中明确指定）
    * - 更新后的记录会被保存到IndexedDB的BUNDLES_STORE_NAME存储区
    */
-  async function updateBundle(id: BundleId, patch: UpdateBundleInput): Promise<BundleRecord | undefined> {
-    const current = await getBundle(id)
+  async function updateBundle(id: BundleId, patch: UpdateBundleInput, transaction?: IdbTransactionContext): Promise<BundleRecord | undefined> {
+    const current = await getBundle(id, false, transaction)
     if (!current)
       return undefined
 
@@ -247,7 +266,12 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
       updatedAt: patch.updatedAt ?? Date.now(),
     }
 
-    await idb.put(BUNDLES_STORE_NAME, updated)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.put(updated))
+    else
+      await idb.put(BUNDLES_STORE_NAME, updated)
+
     return updated
   }
 
@@ -262,7 +286,7 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * - createdAt 和 updatedAt 默认为当前时间戳
    * 规范化后的记录会被存储到 IndexedDB 的 BUNDLES_STORE_NAME 存储中
    */
-  async function upsertBundle(bundle: BundleRecord): Promise<BundleRecord> {
+  async function upsertBundle(bundle: BundleRecord, transaction?: IdbTransactionContext): Promise<BundleRecord> {
     const now = Date.now()
     const normalized: BundleRecord = {
       ...bundle,
@@ -272,7 +296,12 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
       updatedAt: bundle.updatedAt ?? now,
     }
 
-    await idb.put(BUNDLES_STORE_NAME, normalized)
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.put(normalized))
+    else
+      await idb.put(BUNDLES_STORE_NAME, normalized)
+
     return normalized
   }
 
@@ -284,8 +313,8 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * @param id - 要删除的Bundle的唯一标识符
    * @returns 返回更新后的Bundle记录，如果Bundle不存在则返回undefined
    */
-  async function softDeleteBundle(id: BundleId): Promise<BundleRecord | undefined> {
-    return updateBundle(id, { deletedAt: Date.now(), updatedAt: Date.now() })
+  async function softDeleteBundle(id: BundleId, transaction?: IdbTransactionContext): Promise<BundleRecord | undefined> {
+    return updateBundle(id, { deletedAt: Date.now(), updatedAt: Date.now() }, transaction)
   }
 
   /**
@@ -294,8 +323,8 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * @returns 返回恢复后的数据包记录，如果恢复失败则返回 undefined
    * @remarks 此函数通过清除 deletedAt 字段和更新 updatedAt 时间戳来恢复已删除的数据包
    */
-  async function restoreBundle(id: BundleId): Promise<BundleRecord | undefined> {
-    return updateBundle(id, { deletedAt: undefined, updatedAt: Date.now() })
+  async function restoreBundle(id: BundleId, transaction?: IdbTransactionContext): Promise<BundleRecord | undefined> {
+    return updateBundle(id, { deletedAt: undefined, updatedAt: Date.now() }, transaction)
   }
 
   /**
@@ -306,8 +335,12 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    *
    * @returns {Promise<void>} 返回一个Promise，当清空操作完成时resolve
    */
-  async function clearBundles(): Promise<void> {
-    await idb.clear(BUNDLES_STORE_NAME)
+  async function clearBundles(transaction?: IdbTransactionContext): Promise<void> {
+    const txStore = getTxStore(transaction)
+    if (txStore)
+      await IdbTransactionUtil.requestToPromise(txStore.clear())
+    else
+      await idb.clear(BUNDLES_STORE_NAME)
   }
 
   /**
@@ -375,8 +408,8 @@ export function bundleSchema(options: BundleSchemaOptions = {}) {
    * @param id - Bundle的唯一标识符
    * @returns 返回更新后的Bundle记录，如果Bundle不存在则返回undefined
    */
-  async function touchBundle(id: BundleId): Promise<BundleRecord | undefined> {
-    return updateBundle(id, { updatedAt: Date.now() })
+  async function touchBundle(id: BundleId, transaction?: IdbTransactionContext): Promise<BundleRecord | undefined> {
+    return updateBundle(id, { updatedAt: Date.now() }, transaction)
   }
 
   return wrapAsyncApiWithLogger(schemaLogger, {

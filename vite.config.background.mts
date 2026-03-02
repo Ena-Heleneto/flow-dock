@@ -20,13 +20,18 @@ export default defineConfig({
     outDir: r('extension/dist/background'),
     cssCodeSplit: false,
     emptyOutDir: false,
-    sourcemap: isDev ? 'inline' : false,
+    sourcemap: false,
     lib: {
       entry: r('src/background/main.ts'),
       name: packageJson.name,
       formats: ['iife'],
     },
     rollupOptions: {
+      onwarn(warning, warn) {
+        if (warning.message.includes('Multiple conflicting contents for sourcemap source'))
+          return
+        warn(warning)
+      },
       output: {
         entryFileNames: 'index.mjs',
         extend: true,

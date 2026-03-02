@@ -1,4 +1,5 @@
 import { onMessage } from 'webext-bridge/background'
+import { isDefinedEventHandler } from '../utils/define-event-handler.util'
 
 type ControllerMethod = (...args: unknown[]) => unknown
 type ControllerInstance = Record<string, ControllerMethod>
@@ -9,6 +10,24 @@ function toKebabCase(value: string) {
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .replace(/_/g, '-')
     .toLowerCase()
+}
+
+function toRouteCase(value: string) {
+  return value
+    .split('/')
+    .map(segment => toKebabCase(segment))
+    .join('/')
+}
+
+function toRouterMessageName(modulePath: string, exportName: string) {
+  const baseName = modulePath
+    .replace(/^\.\/routers\//, '')
+    .replace(/\.router\.ts$/, '')
+
+  if (exportName === 'default')
+    return toRouteCase(baseName)
+
+  return `${toRouteCase(baseName)}/${toKebabCase(exportName)}`
 }
 
 function isControllerClass(value: unknown): value is ControllerClass {
@@ -28,7 +47,7 @@ function isControllerClass(value: unknown): value is ControllerClass {
 }
 
 export function registerControllers() {
-  const modules = import.meta.glob<Record<string, unknown>>('./controllers/*.controller.ts', { eager: true })
+  const modules = import.meta.glob<Record<string, unknown>>('./controllers/**/*.controller.ts', { eager: true })
 
   Object.values(modules).forEach((moduleExports) => {
     Object.values(moduleExports).forEach((exportedMember) => {
@@ -62,6 +81,30 @@ export function registerControllers() {
         onMessage(messageName as never, async (...args: unknown[]) => {
           return await handler(...args)
         })
+      })
+    })
+  })
+}
+
+export function registerRouterEventHandlers() {
+  const modules = import.meta.glob<Record<string, unknown>>('./routers/**/*.router.ts', { eager: true })
+  const registeredEventNames = new Set<string>()
+
+  Object.entries(modules).forEach(([modulePath, moduleExports]) => {
+    Object.entries(moduleExports).forEach(([exportName, exportedMember]) => {
+      if (!isDefinedEventHandler(exportedMember))
+        return
+
+      const messageName = toRouterMessageName(modulePath, exportName)
+      if (registeredEventNames.has(messageName)) {
+        console.warn(`[registerRouterEventHandlers] Duplicate handler ignored: ${messageName}`)
+        return
+      }
+
+      registeredEventNames.add(messageName)
+
+      onMessage(messageName as never, async (...args: unknown[]) => {
+        return await exportedMember.handler(...args)
       })
     })
   })

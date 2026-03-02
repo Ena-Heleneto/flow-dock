@@ -1,4 +1,6 @@
 // import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
+import { IdbTransactionUtil } from '../utils/transaction.util'
+import type { IdbTransactionContext } from '../utils/transaction.util'
 
 export const SCREENSHOT_LINKS_STORE_NAME = 'screenshot_links'
 
@@ -54,16 +56,40 @@ function createLinkId(screenshotId: string): ScreenshotLinkId {
   return screenshotId
 }
 
+async function removeUniqueTargetConflicts(store: IDBObjectStore, record: ScreenshotLinkRecord) {
+  const checks: Array<{ index: 'pageId' | 'componentId' | 'bundleId', value?: string }> = [
+    { index: 'pageId', value: record.pageId },
+    { index: 'componentId', value: record.componentId },
+    { index: 'bundleId', value: record.bundleId },
+  ]
+
+  for (const { index, value } of checks) {
+    if (!value)
+      continue
+
+    const existed = await IdbTransactionUtil.requestToPromise<ScreenshotLinkRecord | undefined>(
+      store.index(index).get(value),
+    )
+
+    if (existed && existed.id !== record.id)
+      await IdbTransactionUtil.requestToPromise(store.delete(existed.id))
+  }
+}
+
 export function screenshotLinksSchema(options: ScreenshotLinksSchemaOptions = {}) {
   const schemaLogger = createLogger('schema:screenshot_links')
 
   const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock',
+    dbName: options.dbName ?? 'flow-dock-dev',
     version: options.version ?? 1,
     stores: [screenshotLinksStoreDefinition],
   })
 
-  async function createScreenshotLink(input: CreateScreenshotLinkInput): Promise<ScreenshotLinkRecord> {
+  function getTxStore(transaction?: IdbTransactionContext) {
+    return transaction?.getStore(SCREENSHOT_LINKS_STORE_NAME)
+  }
+
+  async function createScreenshotLink(input: CreateScreenshotLinkInput, transaction?: IdbTransactionContext): Promise<ScreenshotLinkRecord> {
     if (!hasAnyTarget(input))
       throw new Error('At least one target is required: pageId/componentId/bundleId')
 
@@ -73,7 +99,18 @@ export function screenshotLinksSchema(options: ScreenshotLinksSchemaOptions = {}
       ts: input.ts ?? Date.now(),
     }
 
-    await idb.add(SCREENSHOT_LINKS_STORE_NAME, record)
+    const txStore = getTxStore(transaction)
+    if (txStore) {
+      await removeUniqueTargetConflicts(txStore, record)
+      await IdbTransactionUtil.requestToPromise(txStore.put(record))
+    }
+    else {
+      await idb.withStore(SCREENSHOT_LINKS_STORE_NAME, 'readwrite', async (store) => {
+        await removeUniqueTargetConflicts(store, record)
+        await IdbTransactionUtil.requestToPromise(store.put(record))
+      })
+    }
+
     return record
   }
 

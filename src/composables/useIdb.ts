@@ -1,3 +1,6 @@
+import { IdbTransactionUtil } from '../utils/transaction.util'
+import type { IdbTransactionContext } from '../utils/transaction.util'
+
 /**
  * IndexedDB 索引定义接口
  * 用于定义 IndexedDB 数据库中对象存储的索引配置
@@ -14,19 +17,6 @@ export interface IdbIndexDefinition {
 }
 
 /**
- * IndexedDB 存储定义接口
- * @interface IdbStoreDefinition
- * @property {string} name - 存储的名称
- * @property {IDBObjectStoreParameters} [options] - 可选的 IndexedDB 对象存储参数配置
- * @property {IdbIndexDefinition[]} [indexes] - 可选的索引定义数组，用于为存储创建索引
- */
-export interface IdbStoreDefinition {
-  name: string
-  options?: IDBObjectStoreParameters
-  indexes?: IdbIndexDefinition[]
-}
-
-/**
  * IndexedDB 操作的配置选项
  * @interface UseIdbOptions
  * @property {string} dbName - 数据库名称，用于标识 IndexedDB 数据库
@@ -37,6 +27,11 @@ export interface UseIdbOptions {
   dbName: string
   version?: number
   stores?: IdbStoreDefinition[]
+}
+
+export interface BeganIdbTransaction {
+  context: IdbTransactionContext
+  done: Promise<void>
 }
 
 export function useIdb(options: UseIdbOptions) {
@@ -69,21 +64,6 @@ export function useIdb(options: UseIdbOptions) {
   }
 
   /**
-   * 等待 IndexedDB 事务完成
-   * @param transaction - IndexedDB 事务对象
-   * @returns 返回一个 Promise，当事务成功完成时 resolve，当事务中止或出错时 reject
-   * @throws {Error} 当事务被中止时抛出错误，错误信息为事务的错误信息或默认的中止消息
-   * @throws {Error} 当事务执行失败时抛出错误，错误信息为事务的错误信息或默认的失败消息
-   */
-  function transactionDone(transaction: IDBTransaction) {
-    return new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve()
-      transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
-      transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed'))
-    })
-  }
-
-  /**
    * IndexedDB 配置选项
    * @typedef {object} IdbOptions
    * @property {string} dbName - IndexedDB 数据库名称
@@ -96,9 +76,11 @@ export function useIdb(options: UseIdbOptions) {
     return stores.every(storeDefinition => database.objectStoreNames.contains(storeDefinition.name))
   }
 
-  function openWithVersion(targetVersion: number) {
+  function openWithVersion(targetVersion?: number) {
     return new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(dbName, targetVersion)
+      const request = typeof targetVersion === 'number'
+        ? indexedDB.open(dbName, targetVersion)
+        : indexedDB.open(dbName)
 
       request.onupgradeneeded = () => {
         const database = request.result
@@ -157,14 +139,52 @@ export function useIdb(options: UseIdbOptions) {
       return dbPromise
 
     dbPromise = (async () => {
-      const database = await openWithVersion(version)
-      if (hasAllConfiguredStores(database))
-        return database
+      let database: IDBDatabase
+      try {
+        database = await openWithVersion(version)
+      }
+      catch (error: unknown) {
+        const isVersionError = error instanceof DOMException
+          ? error.name === 'VersionError'
+          : (typeof error === 'object' && error !== null && 'name' in error && (error as { name?: string }).name === 'VersionError')
 
-      const nextVersion = database.version + 1
-      database.close()
-      return await openWithVersion(nextVersion)
-    })()
+        if (!isVersionError)
+          throw error
+
+        database = await openWithVersion()
+      }
+
+      let attempts = 0
+      while (!hasAllConfiguredStores(database)) {
+        if (attempts >= 10) {
+          database.close()
+          throw new Error(`Failed to ensure required object stores for DB "${dbName}" after multiple upgrade attempts`)
+        }
+
+        attempts += 1
+        const nextVersion = database.version + 1
+        database.close()
+
+        try {
+          database = await openWithVersion(nextVersion)
+        }
+        catch (error: unknown) {
+          const isVersionError = error instanceof DOMException
+            ? error.name === 'VersionError'
+            : (typeof error === 'object' && error !== null && 'name' in error && (error as { name?: string }).name === 'VersionError')
+
+          if (!isVersionError)
+            throw error
+
+          database = await openWithVersion()
+        }
+      }
+
+      return database
+    })().catch((error) => {
+      dbPromise = null
+      throw error
+    })
 
     return dbPromise
   }
@@ -183,12 +203,48 @@ export function useIdb(options: UseIdbOptions) {
     mode: IDBTransactionMode,
     action: (store: IDBObjectStore) => T | Promise<T>,
   ) {
+    return transaction(storeName, mode, ({ getStore }) => action(getStore(storeName)))
+  }
+
+  /**
+   * 在一个 IndexedDB 事务中执行多步操作
+   *
+   * @template T - 事务回调返回值类型
+   * @param storeNames - 参与事务的对象存储名称（可单个或多个）
+   * @param mode - 事务模式，可为 'readonly' 或 'readwrite'
+   * @param action - 事务回调，可通过 getStore 获取已声明 store
+   * @returns 返回事务回调结果，且仅在事务成功完成后 resolve
+   * @throws 当回调抛错、事务中止或事务失败时抛出错误
+   */
+  async function transaction<T>(
+    storeNames: string | string[],
+    mode: IDBTransactionMode,
+    action: (context: IdbTransactionContext) => T | Promise<T>,
+  ) {
     const database = await open()
-    const transaction = database.transaction(storeName, mode)
-    const store = transaction.objectStore(storeName)
-    const result = await action(store)
-    await transactionDone(transaction)
-    return result
+    return await IdbTransactionUtil.run({ database, storeNames, mode, action })
+  }
+
+  async function beginTransaction(
+    storeNames: string | string[],
+    mode: IDBTransactionMode,
+  ): Promise<BeganIdbTransaction> {
+    const database = await open()
+    const names = IdbTransactionUtil.normalizeStoreNames(storeNames)
+    const nameSet = new Set(names)
+    const transaction = database.transaction(names, mode)
+
+    return {
+      context: {
+        transaction,
+        getStore(storeName: string) {
+          if (!nameSet.has(storeName))
+            throw new Error(`Store "${storeName}" is not part of current transaction`)
+          return transaction.objectStore(storeName)
+        },
+      },
+      done: IdbTransactionUtil.done(transaction),
+    }
   }
 
   /**
@@ -303,5 +359,5 @@ export function useIdb(options: UseIdbOptions) {
     })
   }
 
-  return { open, close, deleteDatabase, withStore, get, getAll, put, add, remove, clear, count }
+  return { open, close, deleteDatabase, withStore, transaction, beginTransaction, get, getAll, put, add, remove, clear, count }
 }

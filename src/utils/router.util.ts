@@ -72,3 +72,32 @@ export async function getCurrentTab(): Promise<Tabs.Tab | undefined> {
   const tabs = await browser.tabs.query({ active: true, lastFocusedWindow: true })
   return tabs[0]
 }
+
+export interface PageMetrics {
+  viewportWidth: number
+  viewportHeight: number
+  pageHeight: number
+  pageWidth: number
+  scrollY: number
+  devicePixelRatio: number
+}
+
+/**
+ * 规范化页面指标数据
+ *
+ * 将页面指标中的各个数值转换为有效的范围内的值。所有尺寸相关的指标
+ * 都会向下取整并确保不小于1，滚动位置确保不小于0，设备像素比确保不小于1。
+ *
+ * @param metrics - 原始的页面指标数据对象
+ * @returns 规范化后的页面指标对象，其中所有数值都已调整到有效范围内
+ */
+export function normalizeMetrics(metrics: PageMetrics): PageMetrics {
+  return {
+    viewportWidth: Math.max(1, Math.floor(metrics.viewportWidth)),
+    viewportHeight: Math.max(1, Math.floor(metrics.viewportHeight)),
+    pageHeight: Math.max(1, Math.floor(metrics.pageHeight)),
+    pageWidth: Math.max(1, Math.floor(metrics.pageWidth)),
+    scrollY: Math.max(0, Math.floor(metrics.scrollY)),
+    devicePixelRatio: Math.max(1, metrics.devicePixelRatio || 1),
+  }
+}

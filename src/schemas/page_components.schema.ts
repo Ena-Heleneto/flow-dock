@@ -143,13 +143,13 @@ export function pageComponentsSchema(options: PageComponentsSchemaOptions = {}) 
    * 初始化IndexedDB实例
    * @description 创建一个IndexedDB数据库连接，用于存储页面组件数据
    * @param {object} options - 配置选项
-   * @param {string} [options.dbName='flow-dock'] - 数据库名称，默认为 'flow-dock'
+   * @param {string} [options.dbName='flow-dock-dev'] - 数据库名称，默认为 'flow-dock-dev'
    * @param {number} [options.version=1] - 数据库版本号，默认为 1
    * @param {Array} options.stores - 对象存储定义数组，包含 pageComponentsStoreDefinition
    * @returns {object} IndexedDB实例对象，提供数据库操作接口
    */
   const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock',
+    dbName: options.dbName ?? 'flow-dock-dev',
     version: options.version ?? 1,
     stores: [pageComponentsStoreDefinition],
   })
