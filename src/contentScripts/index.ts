@@ -16,6 +16,7 @@ import '~/styles/index'
   // mount component to context window
   const container = document.createElement('div')
   container.id = __NAME__
+  container.setAttribute('data-flow-dock-overlay', 'true')
   const root = document.createElement('div')
   container.appendChild(root)
   document.body.appendChild(container)

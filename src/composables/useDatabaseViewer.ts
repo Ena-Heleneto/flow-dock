@@ -391,6 +391,40 @@ export function useDbViewer(dbName: MaybeRefOrGetter<string> = 'flow-dock-dev') 
   }
 
   /**
+   * 清空当前表（真实删除）
+   *
+   * @description
+   * 使用 IndexedDB 的 `clear()` 清空当前选中对象存储中的所有记录。
+   * 该操作不可恢复，执行后会刷新当前表预览数据。
+   */
+  async function handleClearCurrentStore(): Promise<void> {
+    mutatingRows.value = true
+    errorMessage.value = ''
+    successMessage.value = ''
+
+    try {
+      if (!selectedStore.value)
+        throw new Error('Please select a table first')
+
+      const targetStoreName = selectedStore.value
+
+      await runStoreWrite(async (store) => {
+        await IdbTransactionUtil.requestToPromise(store.clear())
+      })
+
+      handleResetEditorWithTemplate()
+      successMessage.value = `Table "${targetStoreName}" cleared successfully`
+      await handleRefreshCurrentStore()
+    }
+    catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : String(error)
+    }
+    finally {
+      mutatingRows.value = false
+    }
+  }
+
+  /**
    * 初始化所有数据库存储
    *
    * 该函数负责初始化后台的所有数据库存储。首先尝试通过消息发送初始化数据库查看器，
@@ -604,6 +638,7 @@ export function useDbViewer(dbName: MaybeRefOrGetter<string> = 'flow-dock-dev') 
     handleUpdateRow,
     handleDeleteRow,
     handleDeletePreviewRow,
+    handleClearCurrentStore,
     handleInitializeAllStores,
     handleRefreshStores,
     handleRefreshCurrentStore,

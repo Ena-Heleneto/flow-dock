@@ -1,6 +1,3 @@
-import { IdbTransactionUtil } from '../utils/transaction.util'
-import type { IdbTransactionContext } from '../utils/transaction.util'
-
 /**
  * IndexedDB 索引定义接口
  * 用于定义 IndexedDB 数据库中对象存储的索引配置

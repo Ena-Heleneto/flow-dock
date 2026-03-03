@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { useDraggable } from '@vueuse/core'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { sendMessage } from 'webext-bridge/content-script'
+
+const FLOAT_MIN_SIZE = 44
+const FLOAT_MARGIN = 20
+const STATUS_AUTO_CLEAR_MS = 2600
 
 /**
  * 用于跟踪元素是否发生过移动
@@ -22,6 +26,23 @@ const startPos = ref<{ x: number, y: number } | null>(null)
 
 const isProcessing = ref<boolean>(false)
 const statusMessage = ref<string>('')
+const isExists = ref<boolean>(false)
+let statusClearTimer: ReturnType<typeof setTimeout> | null = null
+
+function setStatus(message: string, autoClear = false) {
+  statusMessage.value = message
+  if (statusClearTimer) {
+    clearTimeout(statusClearTimer)
+    statusClearTimer = null
+  }
+
+  if (autoClear && message) {
+    statusClearTimer = setTimeout(() => {
+      statusMessage.value = ''
+      statusClearTimer = null
+    }, STATUS_AUTO_CLEAR_MS)
+  }
+}
 
 /**
  * 处理保存页面的异步函数
@@ -38,11 +59,34 @@ async function handleAnalyzePage() {
   return analyzeResult
 }
 
-function isSaveSuccess(result: unknown) {
+function getResponseCode(result: unknown): number {
   if (!result || typeof result !== 'object')
-    return false
+    return -1
+
   const code = (result as { code?: unknown }).code
-  return code === 0
+  return typeof code === 'number' ? code : -1
+}
+
+function isSaveSuccess(result: unknown) {
+  return getResponseCode(result) === 0
+}
+
+async function requestSaveWithRetry() {
+  try {
+    const result = await sendMessage('pages/save', {}, 'background')
+    logger.success('save-page success', result)
+    return result
+  }
+  catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (!errorMessage.includes('Extension context invalidated'))
+      throw error
+
+    await new Promise(resolve => setTimeout(resolve, 300))
+    const retryResult = await sendMessage('pages/save', {}, 'background')
+    logger.success('save-page success after retry', retryResult)
+    return retryResult
+  }
 }
 
 async function handleSavePage() {
@@ -50,48 +94,36 @@ async function handleSavePage() {
     return
 
   isProcessing.value = true
-  statusMessage.value = '处理中...'
+  setStatus('处理中...')
 
   try {
-    const result = await sendMessage('pages/save', {}, 'background')
-    logger.success('save-page success', result)
+    const result = await requestSaveWithRetry()
     if (isSaveSuccess(result)) {
-      await handleAnalyzePage()
-      statusMessage.value = '保存并分析成功'
+      const analyzeResult = await handleAnalyzePage()
+      if (getResponseCode(analyzeResult) === 0) {
+        setStatus('保存并分析成功', true)
+        isExists.value = true
+      }
+      else {
+        setStatus('保存成功，分析失败', true)
+      }
     }
     else {
-      statusMessage.value = '保存未成功'
+      setStatus('保存未成功', true)
     }
   }
   catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    if (errorMessage.includes('Extension context invalidated')) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        const retryResult = await sendMessage('pages/save', {}, 'background')
-        logger.success('save-page success after retry', retryResult)
-        if (isSaveSuccess(retryResult)) {
-          await handleAnalyzePage()
-          statusMessage.value = '重试后保存并分析成功'
-        }
-        else {
-          statusMessage.value = '重试后保存未成功'
-        }
-      }
-      catch (retryError) {
-        logger.error('save-page retry failed', retryError)
-        statusMessage.value = '重试失败'
-      }
-    }
-    else {
-      statusMessage.value = '保存失败'
-    }
-
+    setStatus('保存失败', true)
     logger.error('save-page failed', error)
   }
   finally {
     isProcessing.value = false
   }
+}
+
+function handleActionClick() {
+  if (!hasMoved.value && !isProcessing.value)
+    void handleSavePage()
 }
 
 /**
@@ -165,14 +197,9 @@ const dragStyle = computed(() => [
   {
     cursor: isDragging.value ? 'grabbing' : 'grab',
     touchAction: 'none',
+    transition: isDragging.value ? 'none' : 'box-shadow 0.2s ease',
   },
 ])
-
-/**
- * 判断某个元素或资源是否存在
- * @type {Ref<boolean>}
- */
-const isExists = ref<boolean>(false)
 
 /**
  * 当前页面的 URL 地址
@@ -242,21 +269,47 @@ function restoreHistoryMethods() {
   history.replaceState = originalReplaceState
 }
 
-onMounted(() => {
-  const margin = 20
-  const size = 40
-  x.value = window.innerWidth - margin - size
-  y.value = window.innerHeight - margin - size
+function getWidgetSize() {
+  const element = DragTargetRef.value
+  const width = element?.offsetWidth ?? FLOAT_MIN_SIZE
+  const height = element?.offsetHeight ?? FLOAT_MIN_SIZE
+  return { width, height }
+}
+
+function clampPosition() {
+  const { width, height } = getWidgetSize()
+  const maxX = Math.max(window.innerWidth - FLOAT_MARGIN - width, 0)
+  const maxY = Math.max(window.innerHeight - FLOAT_MARGIN - height, 0)
+
+  x.value = Math.min(Math.max(x.value, FLOAT_MARGIN), maxX)
+  y.value = Math.min(Math.max(y.value, FLOAT_MARGIN), maxY)
+}
+
+function handleWindowResize() {
+  clampPosition()
+}
+
+onMounted(async () => {
+  await nextTick()
+  const { width, height } = getWidgetSize()
+  x.value = window.innerWidth - FLOAT_MARGIN - width
+  y.value = window.innerHeight - FLOAT_MARGIN - height
+  clampPosition()
   void handleExistsPages()
   overrideHistoryMethods()
   window.addEventListener('popstate', handleLocationChange)
   window.addEventListener('hashchange', handleLocationChange)
+  window.addEventListener('resize', handleWindowResize)
 })
 
 onBeforeUnmount(() => {
+  if (statusClearTimer)
+    clearTimeout(statusClearTimer)
+
   restoreHistoryMethods()
   window.removeEventListener('popstate', handleLocationChange)
   window.removeEventListener('hashchange', handleLocationChange)
+  window.removeEventListener('resize', handleWindowResize)
 })
 
 /**
@@ -272,10 +325,12 @@ onBeforeUnmount(() => {
  */
 async function handleExistsPages() {
   try {
-    const { data } = await sendMessage('pages/exists', {}, 'background')
-    isExists.value = data
+    const result = await sendMessage('pages/exists', {}, 'background')
+    const data = result && typeof result === 'object' ? (result as { data?: unknown }).data : false
+    isExists.value = Boolean(data)
   }
   catch (error: unknown) {
+    isExists.value = false
     logger.error('exists-pages failed', error)
   }
 }
@@ -283,21 +338,34 @@ async function handleExistsPages() {
 
 <template>
   <div
-    ref="DragTargetRef" :style="dragStyle" fixed="~" z="100" flex="~ col" gap="2" font="sans" justify="center"
-    items="center" select="none" leading="1em" p="2" bg="#7C3CFF hover:#6A2BFF"
+    ref="DragTargetRef" :style="dragStyle" fixed="~" z="100" flex="~" items="center" gap="2" font="sans"
+    select="none" rounded="full" p="x-2 y-1.5" border="~ violet-200/70" shadow="lg" bg="white/95"
   >
-    <div text="white lg">
-      {{ isExists ? '已存在' : '未存在' }}
+    <div flex="~ col" gap="0.5" p="l-1" min-w="28" max-w="52">
+      <div flex="~" items="center" gap="1.5" leading="1">
+        <div
+          w="2" h="2" rounded="full"
+          :class="isExists ? 'bg-green-500' : 'bg-amber-500'"
+        />
+        <div text="xs slate-700" whitespace="nowrap">
+          {{ isExists ? '页面已存在' : '页面未保存' }}
+        </div>
+      </div>
+
+      <div v-if="statusMessage" text="xs slate-500" break-all leading="tight">
+        {{ statusMessage }}
+      </div>
     </div>
-    <div v-if="statusMessage" text="white xs" max-w="44" text-center>
-      {{ statusMessage }}
-    </div>
+
     <button
-      class="flex w-10 h-10 rounded-full shadow cursor-pointer border-none disabled:cursor-not-allowed disabled:opacity-60"
+      class="flex w-11 h-11 rounded-full shadow cursor-pointer border-none disabled:cursor-not-allowed disabled:opacity-60"
+      bg="violet-600 hover:violet-700"
       :disabled="isProcessing"
-      @click.stop="!hasMoved && !isProcessing && handleSavePage()"
+      :title="isProcessing ? '处理中...' : '保存并分析当前页面'"
+      @click.stop="handleActionClick"
     >
-      <div i-mdi:clipboard-text-clock-outline block="~" m="auto" text="white lg" />
+      <div v-if="isProcessing" i-svg-spinners:90-ring block="~" m="auto" text="white" />
+      <div v-else i-mdi:clipboard-text-clock-outline block="~" m="auto" text="white lg" />
 
       <!-- mdi:record-rec -->
     </button>

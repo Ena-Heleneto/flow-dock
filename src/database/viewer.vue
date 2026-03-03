@@ -18,6 +18,7 @@ const {
   handleUpdateRow,
   handleDeleteRow,
   handleDeletePreviewRow,
+  handleClearCurrentStore,
   handleInitializeAllStores,
   handleRefreshStores,
   handleRefreshCurrentStore,
@@ -28,16 +29,17 @@ bindViewerLifecycle()
 </script>
 
 <template>
-  <div p="x-4 y-6" text="gray-700 dark:gray-200">
+  <div p="x-4 y-6" text="gray-700 dark:gray-200" max="w-7xl" m="x-auto">
     <DatabaseHeader v-model:db-name="dbName" />
     <DatabaseOperate
       :initializing-stores="initializingStores" :loading-stores="loadingStores"
-      :loading-rows="loadingRows" :selected-store="selectedStore" @initialize-all-stores="handleInitializeAllStores"
+      :loading-rows="loadingRows" :mutating-rows="mutatingRows" :selected-store="selectedStore" @initialize-all-stores="handleInitializeAllStores"
       @refresh-stores="handleRefreshStores" @refresh-current-store="handleRefreshCurrentStore"
+      @clear-current-store="handleClearCurrentStore"
     />
     <DatabaseMessage :success-message="successMessage" :error-message="errorMessage" />
 
-    <div m="t-4" grid="~ cols-[220px_1fr]" gap="4">
+    <div m="t-4" grid="~ cols-[240px_1fr]" gap="4">
       <DatabaseDocument v-model:selected-store="selectedStore" :stores="stores" />
       <DatabaseContent
         :selected-store="selectedStore" :total-rows="totalRows" :preview-limit="previewLimit"

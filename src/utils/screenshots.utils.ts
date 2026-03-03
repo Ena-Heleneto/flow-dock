@@ -25,6 +25,73 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+async function setOverlayHidden(tabId: number, hidden: boolean) {
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      args: [hidden],
+      func: (nextHidden: boolean) => {
+        const overlays = Array.from(document.querySelectorAll('[data-flow-dock-overlay="true"]')) as HTMLElement[]
+        for (const overlay of overlays) {
+          if (nextHidden) {
+            if (!overlay.hasAttribute('data-flow-dock-prev-visibility'))
+              overlay.setAttribute('data-flow-dock-prev-visibility', overlay.style.visibility ?? '')
+            if (!overlay.hasAttribute('data-flow-dock-prev-opacity'))
+              overlay.setAttribute('data-flow-dock-prev-opacity', overlay.style.opacity ?? '')
+            if (!overlay.hasAttribute('data-flow-dock-prev-pointer-events'))
+              overlay.setAttribute('data-flow-dock-prev-pointer-events', overlay.style.pointerEvents ?? '')
+
+            overlay.style.setProperty('visibility', 'hidden', 'important')
+            overlay.style.setProperty('opacity', '0', 'important')
+            overlay.style.setProperty('pointer-events', 'none', 'important')
+          }
+          else {
+            const prevVisibility = overlay.getAttribute('data-flow-dock-prev-visibility')
+            const prevOpacity = overlay.getAttribute('data-flow-dock-prev-opacity')
+            const prevPointerEvents = overlay.getAttribute('data-flow-dock-prev-pointer-events')
+
+            if (prevVisibility)
+              overlay.style.visibility = prevVisibility
+            else
+              overlay.style.removeProperty('visibility')
+
+            if (prevOpacity)
+              overlay.style.opacity = prevOpacity
+            else
+              overlay.style.removeProperty('opacity')
+
+            if (prevPointerEvents)
+              overlay.style.pointerEvents = prevPointerEvents
+            else
+              overlay.style.removeProperty('pointer-events')
+
+            overlay.removeAttribute('data-flow-dock-prev-visibility')
+            overlay.removeAttribute('data-flow-dock-prev-opacity')
+            overlay.removeAttribute('data-flow-dock-prev-pointer-events')
+          }
+        }
+      },
+    })
+  }
+  catch {
+  }
+}
+
+async function clearScrollRootMarker(tabId: number) {
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const targets = Array.from(document.querySelectorAll('[data-flow-dock-scroll-root="true"]'))
+        for (const target of targets)
+          target.removeAttribute('data-flow-dock-scroll-root')
+      },
+    })
+  }
+  catch {
+  }
+}
+
 /**
  * 获取页面的度量信息
  *
@@ -45,27 +112,147 @@ async function getPageMetrics(tabId: number) {
   const [injectionResult] = await browser.scripting.executeScript({
     target: { tabId },
     func: () => {
+      const SCROLL_ROOT_ATTR = 'data-flow-dock-scroll-root'
       const body = document.body
       const root = document.documentElement
-      const scrollWidth = Math.max(
-        window.innerWidth,
-        root?.scrollWidth ?? 0,
-        body?.scrollWidth ?? 0,
-      )
-      const scrollHeight = Math.max(
-        window.innerHeight,
-        root?.scrollHeight ?? 0,
-        body?.scrollHeight ?? 0,
-      )
+
+      for (const marked of Array.from(document.querySelectorAll(`[${SCROLL_ROOT_ATTR}="true"]`)))
+        marked.removeAttribute(SCROLL_ROOT_ATTR)
+
+      const pageViewportWidth = window.innerWidth
+      const pageViewportHeight = window.innerHeight
+      const scrollWidth = Math.max(pageViewportWidth, root?.scrollWidth ?? 0, body?.scrollWidth ?? 0)
+      const scrollHeight = Math.max(pageViewportHeight, root?.scrollHeight ?? 0, body?.scrollHeight ?? 0)
+      const windowMaxScrollY = Math.max(0, scrollHeight - pageViewportHeight)
+
+      const hasScrollableOverflow = (element: HTMLElement) => {
+        const style = window.getComputedStyle(element)
+        return /auto|scroll|overlay/i.test(style.overflowY)
+      }
+
+      const getVisibleRect = (rect: DOMRect) => {
+        const top = Math.max(0, rect.top)
+        const left = Math.max(0, rect.left)
+        const right = Math.min(pageViewportWidth, rect.right)
+        const bottom = Math.min(pageViewportHeight, rect.bottom)
+        return {
+          top,
+          left,
+          right,
+          bottom,
+          width: Math.max(0, right - left),
+          height: Math.max(0, bottom - top),
+        }
+      }
+
+      const isCentralWideCandidate = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect()
+        const visible = getVisibleRect(rect)
+        if (visible.width < 80 || visible.height < 80)
+          return false
+
+        const widthRatio = visible.width / Math.max(1, pageViewportWidth)
+        if (widthRatio < 0.45)
+          return false
+
+        const centerX = (visible.left + visible.right) / 2
+        const minCenter = pageViewportWidth * 0.25
+        const maxCenter = pageViewportWidth * 0.75
+        return centerX >= minCenter && centerX <= maxCenter
+      }
+
+      const candidates = Array.from(document.querySelectorAll('body *')) as HTMLElement[]
+      let selectedElement: HTMLElement | null = null
+      let selectedScore = 0
+
+      const centerElement = document.elementFromPoint(pageViewportWidth / 2, pageViewportHeight / 2) as HTMLElement | null
+      const scrollableCenterAncestors: HTMLElement[] = []
+      let parent = centerElement?.parentElement ?? null
+      while (parent) {
+        if (hasScrollableOverflow(parent) && parent.scrollHeight - parent.clientHeight > 8)
+          scrollableCenterAncestors.push(parent)
+        parent = parent.parentElement
+      }
+
+      if (scrollableCenterAncestors.length) {
+        const preferred = scrollableCenterAncestors.find(isCentralWideCandidate)
+        if (preferred) {
+          selectedElement = preferred
+          selectedScore = (selectedElement.scrollHeight - selectedElement.clientHeight) * 2
+        }
+      }
+
+      for (const element of candidates) {
+        if (!hasScrollableOverflow(element))
+          continue
+
+        const scrollRange = element.scrollHeight - element.clientHeight
+        if (scrollRange <= 8)
+          continue
+
+        const rect = element.getBoundingClientRect()
+        const visible = getVisibleRect(rect)
+        const visibleHeight = visible.height
+        const visibleWidth = visible.width
+        if (visibleHeight < 80 || visibleWidth < 80)
+          continue
+
+        if (!isCentralWideCandidate(element))
+          continue
+
+        const visibleArea = visibleHeight * visibleWidth
+        const score = scrollRange * visibleArea
+        if (score > selectedScore) {
+          selectedScore = score
+          selectedElement = element
+        }
+      }
+
+      const useElementScroll = Boolean(selectedElement)
+
+      if (useElementScroll && selectedElement) {
+        selectedElement.setAttribute(SCROLL_ROOT_ATTR, 'true')
+        const rect = selectedElement.getBoundingClientRect()
+        const top = Math.max(0, Math.min(pageViewportHeight, rect.top))
+        const left = Math.max(0, Math.min(pageViewportWidth, rect.left))
+        const right = Math.max(left + 1, Math.min(pageViewportWidth, rect.right))
+        const bottom = Math.max(top + 1, Math.min(pageViewportHeight, rect.bottom))
+
+        return {
+          scrollMode: 'element' as const,
+          scrollX: selectedElement.scrollLeft,
+          scrollY: selectedElement.scrollTop,
+          viewportWidth: selectedElement.clientWidth,
+          viewportHeight: selectedElement.clientHeight,
+          scrollWidth: selectedElement.scrollWidth,
+          scrollHeight: selectedElement.scrollHeight,
+          devicePixelRatio: window.devicePixelRatio || 1,
+          targetViewportTop: top,
+          targetViewportLeft: left,
+          targetViewportWidth: Math.max(1, right - left),
+          targetViewportHeight: Math.max(1, bottom - top),
+          pageViewportWidth,
+          pageViewportHeight,
+          maxScrollY: Math.max(0, selectedElement.scrollHeight - selectedElement.clientHeight),
+        }
+      }
 
       return {
+        scrollMode: 'window' as const,
         scrollX: window.scrollX,
         scrollY: window.scrollY,
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
+        viewportWidth: pageViewportWidth,
+        viewportHeight: pageViewportHeight,
         scrollWidth,
         scrollHeight,
         devicePixelRatio: window.devicePixelRatio || 1,
+        targetViewportTop: 0,
+        targetViewportLeft: 0,
+        targetViewportWidth: pageViewportWidth,
+        targetViewportHeight: pageViewportHeight,
+        pageViewportWidth,
+        pageViewportHeight,
+        maxScrollY: windowMaxScrollY,
       }
     },
   })
@@ -79,11 +266,19 @@ async function getPageMetrics(tabId: number) {
  * @param y - 目标垂直滚动位置(像素)
  * @returns 返回滚动后页面的实际垂直位置，如果执行失败则返回0
  */
-async function scrollPageTo(tabId: number, y: number) {
+async function scrollPageTo(tabId: number, y: number, scrollMode: PageMetrics['scrollMode']) {
   const [injectionResult] = await browser.scripting.executeScript({
     target: { tabId },
-    args: [y],
-    func: (nextY: number) => {
+    args: [y, scrollMode],
+    func: (nextY: number, nextMode: PageMetrics['scrollMode']) => {
+      if (nextMode === 'element') {
+        const target = document.querySelector('[data-flow-dock-scroll-root="true"]') as HTMLElement | null
+        if (target) {
+          target.scrollTop = nextY
+          return target.scrollTop
+        }
+      }
+
       window.scrollTo(0, nextY)
       return window.scrollY
     },
@@ -104,26 +299,30 @@ async function scrollPageTo(tabId: number, y: number) {
  * @returns 返回一个Promise，当脚本执行完成时解决
  *
  */
-async function restorePageScroll(tabId: number, x: number, y: number) {
+async function restorePageScroll(tabId: number, x: number, y: number, scrollMode: PageMetrics['scrollMode']) {
   await browser.scripting.executeScript({
     target: { tabId },
-    args: [x, y],
-    func: (nextX: number, nextY: number) => {
+    args: [x, y, scrollMode],
+    func: (nextX: number, nextY: number, nextMode: PageMetrics['scrollMode']) => {
+      if (nextMode === 'element') {
+        const target = document.querySelector('[data-flow-dock-scroll-root="true"]') as HTMLElement | null
+        if (target) {
+          target.scrollLeft = nextX
+          target.scrollTop = nextY
+          return
+        }
+      }
+
       window.scrollTo(nextX, nextY)
     },
   })
 }
 
-async function stitchCapturedSlices(slices: CapturedSlice[], metrics: PageMetrics) {
-  if (!slices.length)
-    throw new Error('No slices captured')
-
-  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap !== 'function')
-    return slices[0].capture
-
-  const firstSlice = slices[0].capture
-  const dpr = firstSlice.width > 0 && metrics.viewportWidth > 0
-    ? firstSlice.width / metrics.viewportWidth
+async function stitchWindowCapturedSlices(slices: CapturedSlice[], metrics: PageMetrics) {
+  const normalizedSlices = [...slices].sort((left, right) => left.scrollY - right.scrollY)
+  const firstSlice = normalizedSlices[0].capture
+  const dpr = firstSlice.width > 0 && metrics.pageViewportWidth > 0
+    ? firstSlice.width / metrics.pageViewportWidth
     : metrics.devicePixelRatio || 1
 
   const canvasWidth = Math.max(1, firstSlice.width)
@@ -133,11 +332,29 @@ async function stitchCapturedSlices(slices: CapturedSlice[], metrics: PageMetric
   if (!context)
     return firstSlice
 
-  for (const slice of slices) {
+  for (let index = 0; index < normalizedSlices.length; index++) {
+    const slice = normalizedSlices[index]
+    const nextSlice = normalizedSlices[index + 1]
     const bitmap = await createImageBitmap(slice.capture.blob)
     try {
       const drawY = Math.max(0, Math.round(slice.scrollY * dpr))
-      context.drawImage(bitmap, 0, drawY)
+      let nextScrollY = nextSlice
+        ? nextSlice.scrollY
+        : Math.min(metrics.scrollHeight, slice.scrollY + metrics.targetViewportHeight)
+
+      if (nextScrollY <= slice.scrollY)
+        nextScrollY = slice.scrollY + metrics.targetViewportHeight
+
+      const cssSegmentHeight = Math.min(metrics.targetViewportHeight, nextScrollY - slice.scrollY)
+      if (cssSegmentHeight <= 0)
+        continue
+
+      const sourceHeight = Math.min(bitmap.height, Math.max(1, Math.round(cssSegmentHeight * dpr)))
+      const targetHeight = Math.min(sourceHeight, Math.max(0, canvas.height - drawY))
+      if (targetHeight <= 0)
+        continue
+
+      context.drawImage(bitmap, 0, 0, bitmap.width, targetHeight, 0, drawY, canvasWidth, targetHeight)
     }
     finally {
       bitmap.close()
@@ -153,49 +370,130 @@ async function stitchCapturedSlices(slices: CapturedSlice[], metrics: PageMetric
   }
 }
 
+async function stitchElementCapturedSlices(slices: CapturedSlice[], metrics: PageMetrics) {
+  const normalizedSlices = [...slices].sort((left, right) => left.scrollY - right.scrollY)
+  const firstSlice = normalizedSlices[0].capture
+  const dpr = firstSlice.width > 0 && metrics.pageViewportWidth > 0
+    ? firstSlice.width / metrics.pageViewportWidth
+    : metrics.devicePixelRatio || 1
+
+  const sourceX = Math.max(0, Math.round(metrics.targetViewportLeft * dpr))
+  const sourceY = Math.max(0, Math.round(metrics.targetViewportTop * dpr))
+  const desiredWidth = Math.max(1, Math.round(metrics.targetViewportWidth * dpr))
+  const desiredViewportHeight = Math.max(1, Math.round(metrics.targetViewportHeight * dpr))
+
+  const sourceWidth = Math.min(desiredWidth, Math.max(1, firstSlice.width - sourceX))
+  const canvasWidth = sourceWidth
+  const canvasHeight = Math.max(1, Math.ceil(metrics.scrollHeight * dpr))
+  const canvas = new OffscreenCanvas(canvasWidth, canvasHeight)
+  const context = canvas.getContext('2d')
+  if (!context)
+    return firstSlice
+
+  for (let index = 0; index < normalizedSlices.length; index++) {
+    const slice = normalizedSlices[index]
+    const nextSlice = normalizedSlices[index + 1]
+    const bitmap = await createImageBitmap(slice.capture.blob)
+    try {
+      let nextScrollY = nextSlice
+        ? nextSlice.scrollY
+        : metrics.scrollHeight
+      if (nextScrollY <= slice.scrollY)
+        nextScrollY = slice.scrollY + metrics.targetViewportHeight
+
+      const cssSegmentHeight = Math.min(metrics.targetViewportHeight, nextScrollY - slice.scrollY)
+      if (cssSegmentHeight <= 0)
+        continue
+
+      const sourceHeight = Math.min(
+        desiredViewportHeight,
+        Math.max(1, Math.round(cssSegmentHeight * dpr)),
+        Math.max(1, bitmap.height - sourceY),
+      )
+      const drawY = Math.max(0, Math.round(slice.scrollY * dpr))
+      const targetHeight = Math.min(sourceHeight, Math.max(0, canvas.height - drawY))
+      if (targetHeight <= 0)
+        continue
+
+      context.drawImage(bitmap, sourceX, sourceY, sourceWidth, targetHeight, 0, drawY, sourceWidth, targetHeight)
+    }
+    finally {
+      bitmap.close()
+    }
+  }
+
+  const blob = await canvas.convertToBlob({ type: 'image/png' })
+  return {
+    mime: blob.type || 'image/png',
+    blob,
+    width: canvas.width,
+    height: canvas.height,
+  }
+}
+
+async function stitchCapturedSlices(slices: CapturedSlice[], metrics: PageMetrics) {
+  if (!slices.length)
+    throw new Error('No slices captured')
+
+  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap !== 'function')
+    return slices[0].capture
+
+  if (metrics.scrollMode === 'element')
+    return await stitchElementCapturedSlices(slices, metrics)
+
+  return await stitchWindowCapturedSlices(slices, metrics)
+}
+
 export async function captureFullPageTab(tabId?: number, windowId?: number) {
   if (typeof tabId !== 'number')
     return await captureVisibleTab(windowId)
 
-  const metrics = await getPageMetrics(tabId)
-  if (!metrics)
-    return await captureVisibleTab(windowId)
-
-  if (metrics.scrollHeight <= metrics.viewportHeight + 1)
-    return await captureVisibleTab(windowId)
-
-  const slices: CapturedSlice[] = []
-  const visitedScrollY = new Set<number>()
-  const originalX = metrics.scrollX
-  const originalY = metrics.scrollY
-
+  await setOverlayHidden(tabId, true)
   try {
-    let targetY = 0
-    while (targetY < metrics.scrollHeight) {
-      const actualScrollY = await scrollPageTo(tabId, targetY)
-      if (visitedScrollY.has(actualScrollY))
-        break
+    const metrics = await getPageMetrics(tabId)
+    if (!metrics)
+      return await captureVisibleTab(windowId)
 
-      visitedScrollY.add(actualScrollY)
-      await sleep(120)
+    if (metrics.maxScrollY <= 1)
+      return await captureVisibleTab(windowId)
 
-      const capture = await captureVisibleTab(windowId)
-      slices.push({ scrollY: actualScrollY, capture })
+    const slices: CapturedSlice[] = []
+    const visitedScrollY = new Set<number>()
+    const originalX = metrics.scrollX
+    const originalY = metrics.scrollY
 
-      if (actualScrollY + metrics.viewportHeight >= metrics.scrollHeight - 1)
-        break
+    try {
+      let targetY = 0
+      while (targetY <= metrics.maxScrollY + 1) {
+        const actualScrollY = await scrollPageTo(tabId, targetY, metrics.scrollMode)
+        if (visitedScrollY.has(actualScrollY))
+          break
 
-      targetY = actualScrollY + metrics.viewportHeight
+        visitedScrollY.add(actualScrollY)
+        await sleep(120)
+
+        const capture = await captureVisibleTab(windowId)
+        slices.push({ scrollY: actualScrollY, capture })
+
+        if (actualScrollY >= metrics.maxScrollY - 1)
+          break
+
+        targetY = Math.min(actualScrollY + metrics.targetViewportHeight, metrics.maxScrollY)
+      }
     }
+    finally {
+      await restorePageScroll(tabId, originalX, originalY, metrics.scrollMode)
+      await clearScrollRootMarker(tabId)
+    }
+
+    if (!slices.length)
+      return await captureVisibleTab(windowId)
+
+    return await stitchCapturedSlices(slices, metrics)
   }
   finally {
-    await restorePageScroll(tabId, originalX, originalY)
+    await setOverlayHidden(tabId, false)
   }
-
-  if (!slices.length)
-    return await captureVisibleTab(windowId)
-
-  return await stitchCapturedSlices(slices, metrics)
 }
 
 /**
