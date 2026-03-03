@@ -23,8 +23,7 @@ export default defineConfig({
     sourcemap: false,
     lib: {
       entry: r('src/background/main.ts'),
-      name: packageJson.name,
-      formats: ['iife'],
+      formats: ['es'],
     },
     rollupOptions: {
       onwarn(warning, warn) {
@@ -34,7 +33,6 @@ export default defineConfig({
       },
       output: {
         entryFileNames: 'index.mjs',
-        extend: true,
       },
     },
   },

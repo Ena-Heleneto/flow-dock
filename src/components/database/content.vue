@@ -39,8 +39,15 @@ function handleFormatRow(value: unknown) {
   if (typeof value === 'undefined')
     return 'undefined'
 
+  if (value instanceof Blob)
+    return JSON.stringify({ __type: 'Blob', size: value.size, mime: value.type }, null, 2)
+
   try {
-    return JSON.stringify(value, null, 2)
+    return JSON.stringify(value, (_key, currentValue) => {
+      if (currentValue instanceof Blob)
+        return { __type: 'Blob', size: currentValue.size, mime: currentValue.type }
+      return currentValue
+    }, 2)
   }
   catch {
     return String(value)

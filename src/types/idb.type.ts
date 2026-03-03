@@ -10,6 +10,7 @@ export type IdbFieldTypeConstructor =
   | StringConstructor
   | NumberConstructor
   | BooleanConstructor
+  | typeof Blob
   | ObjectConstructor
   | ArrayConstructor
   | DateConstructor
@@ -25,10 +26,11 @@ type InferConstructorType<T> =
   T extends StringConstructor ? string
     : T extends NumberConstructor ? number
       : T extends BooleanConstructor ? boolean
-        : T extends DateConstructor ? Date
-          : T extends ArrayConstructor ? unknown[]
-            : T extends ObjectConstructor ? Record<string, unknown>
-              : unknown
+        : T extends typeof Blob ? Blob
+          : T extends DateConstructor ? Date
+            : T extends ArrayConstructor ? unknown[]
+              : T extends ObjectConstructor ? Record<string, unknown>
+                : unknown
 
 type InferArraySubType<T> =
   T extends IdbRecordDefinition ? InferRecordType<T>
@@ -56,4 +58,36 @@ export interface IdbStoreDefinition {
 
 export interface IdbBaseRecord {
   deletedAt?: number
+}
+
+/**
+ * IndexedDB 联查步骤中可用的查询器定义
+ */
+export interface IdbCriteriaReader {
+  findByCriteria: <T = unknown>(
+    transaction: { getStore: (storeName: string) => IDBObjectStore },
+    options: {
+      indexName: string
+      query: IDBValidKey | IDBKeyRange
+      count?: number
+    },
+  ) => Promise<T[]>
+}
+
+/**
+ * IndexedDB 联查步骤配置
+ */
+export interface IdbLinkedFindByCriteriaStep {
+  schema: IdbCriteriaReader
+  indexName: string
+  query?: IDBValidKey | IDBKeyRange
+  queryFrom?: string
+  count?: number
+}
+
+/**
+ * IndexedDB 联查结果
+ */
+export interface IdbLinkedFindByCriteriaResult {
+  records: Array<Record<string, unknown> | null>
 }

@@ -13,17 +13,19 @@ export interface RunTransactionOptions<T> {
   action: (context: IdbTransactionContext) => T | Promise<T>
 }
 
+export type IdbTransactionStoreInput = IdbStoreDefinition | SchemaHandlerResult<IdbStoreDefinition>
+
 /**
  * IndexedDB 事务工具配置选项接口
  * @interface IdbTransactionUtilOptions
  * @property {string} dbName - 数据库名称，用于标识 IndexedDB 实例
  * @property {number} [version] - 可选，数据库版本号，用于数据库升级和迁移
- * @property {IdbStoreDefinition[]} [stores] - 可选，对象存储空间定义数组，用于初始化数据库的存储结构
+ * @property {IdbTransactionStoreInput[]} [stores] - 可选，对象存储空间定义数组，可直接传入 defineSchemaHandler 返回实例
  */
 export interface IdbTransactionUtilOptions {
   dbName: string
   version?: number
-  stores?: IdbStoreDefinition[]
+  stores?: IdbTransactionStoreInput[]
 }
 
 /**

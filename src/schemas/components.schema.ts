@@ -1,6 +1,4 @@
 // import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
-import { IdbTransactionUtil } from '../utils/transaction.util'
-import type { IdbTransactionContext } from '../utils/transaction.util'
 
 /**
  * 组件存储的名称常量

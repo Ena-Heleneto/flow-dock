@@ -1,289 +1,47 @@
-// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
-import { IdbTransactionUtil } from '../utils/transaction.util'
-import type { IdbTransactionContext } from '../utils/transaction.util'
-
-export const SCREENSHOT_LINKS_STORE_NAME = 'screenshot_links'
-
-export type ScreenshotLinkId = string
-
-export interface ScreenshotLinkRecord {
-  id: ScreenshotLinkId
-  screenshotId: string
-  pageId?: string
-  componentId?: string
-  bundleId?: string
-  ts: number
-  deletedAt?: number
-}
-
-export type CreateScreenshotLinkInput = Omit<ScreenshotLinkRecord, 'id' | 'ts'> & {
-  id?: ScreenshotLinkId
-  ts?: number
-}
-
-export type UpdateScreenshotLinkInput = Partial<Omit<ScreenshotLinkRecord, 'id' | 'screenshotId'>>
-
-export interface ScreenshotLinksSchemaOptions {
-  dbName?: string
-  version?: number
-}
-
-const screenshotLinksStoreDefinition: IdbStoreDefinition = {
-  name: SCREENSHOT_LINKS_STORE_NAME,
-  options: { keyPath: 'id' },
-  indexes: [
-    { name: 'screenshotId', keyPath: 'screenshotId', options: { unique: true } },
-    { name: 'pageId', keyPath: 'pageId', options: { unique: true } },
-    { name: 'componentId', keyPath: 'componentId', options: { unique: true } },
-    { name: 'bundleId', keyPath: 'bundleId', options: { unique: true } },
-    { name: 'ts', keyPath: 'ts' },
-  ],
-}
-
-function hasAnyTarget(input: { pageId?: string, componentId?: string, bundleId?: string }) {
-  return Boolean(input.pageId || input.componentId || input.bundleId)
-}
-
-function isActiveLink(record: ScreenshotLinkRecord) {
-  return typeof record.deletedAt !== 'number'
-}
-
-function filterActiveLinks(records: ScreenshotLinkRecord[]) {
-  return records.filter(isActiveLink)
-}
-
-function createLinkId(screenshotId: string): ScreenshotLinkId {
-  return screenshotId
-}
-
-async function removeUniqueTargetConflicts(store: IDBObjectStore, record: ScreenshotLinkRecord) {
-  const checks: Array<{ index: 'pageId' | 'componentId' | 'bundleId', value?: string }> = [
-    { index: 'pageId', value: record.pageId },
-    { index: 'componentId', value: record.componentId },
-    { index: 'bundleId', value: record.bundleId },
-  ]
-
-  for (const { index, value } of checks) {
-    if (!value)
-      continue
-
-    const existed = await IdbTransactionUtil.requestToPromise<ScreenshotLinkRecord | undefined>(
-      store.index(index).get(value),
-    )
-
-    if (existed && existed.id !== record.id)
-      await IdbTransactionUtil.requestToPromise(store.delete(existed.id))
-  }
-}
-
-export function screenshotLinksSchema(options: ScreenshotLinksSchemaOptions = {}) {
-  const schemaLogger = createLogger('schema:screenshot_links')
-
-  const idb = useIdb({
-    dbName: options.dbName ?? 'flow-dock-dev',
-    version: options.version ?? 1,
-    stores: [screenshotLinksStoreDefinition],
-  })
-
-  function getTxStore(transaction?: IdbTransactionContext) {
-    return transaction?.getStore(SCREENSHOT_LINKS_STORE_NAME)
-  }
-
-  async function createScreenshotLink(input: CreateScreenshotLinkInput, transaction?: IdbTransactionContext): Promise<ScreenshotLinkRecord> {
-    if (!hasAnyTarget(input))
-      throw new Error('At least one target is required: pageId/componentId/bundleId')
-
-    const record: ScreenshotLinkRecord = {
-      ...input,
-      id: input.id ?? createLinkId(input.screenshotId),
-      ts: input.ts ?? Date.now(),
-    }
-
-    const txStore = getTxStore(transaction)
-    if (txStore) {
-      await removeUniqueTargetConflicts(txStore, record)
-      await IdbTransactionUtil.requestToPromise(txStore.put(record))
-    }
-    else {
-      await idb.withStore(SCREENSHOT_LINKS_STORE_NAME, 'readwrite', async (store) => {
-        await removeUniqueTargetConflicts(store, record)
-        await IdbTransactionUtil.requestToPromise(store.put(record))
-      })
-    }
-
-    return record
-  }
-
-  async function getScreenshotLink(id: ScreenshotLinkId, includeDeleted = false): Promise<ScreenshotLinkRecord | undefined> {
-    const record = await idb.get<ScreenshotLinkRecord>(SCREENSHOT_LINKS_STORE_NAME, id)
-    if (!includeDeleted && record && !isActiveLink(record))
-      return undefined
-
-    return record
-  }
-
-  async function getByScreenshotId(screenshotId: string, includeDeleted = false): Promise<ScreenshotLinkRecord | undefined> {
-    return idb.withStore(SCREENSHOT_LINKS_STORE_NAME, 'readonly', (store) => {
-      return new Promise<ScreenshotLinkRecord | undefined>((resolve, reject) => {
-        const request = store.index('screenshotId').get(screenshotId)
-        request.onsuccess = () => {
-          const record = request.result as ScreenshotLinkRecord | undefined
-          if (!includeDeleted && record && !isActiveLink(record)) {
-            resolve(undefined)
-            return
-          }
-          resolve(record)
-        }
-        request.onerror = () => reject(request.error ?? new Error('Query screenshotId failed'))
-      })
-    })
-  }
-
-  async function listScreenshotLinks(): Promise<ScreenshotLinkRecord[]> {
-    const records = await idb.getAll<ScreenshotLinkRecord>(SCREENSHOT_LINKS_STORE_NAME)
-    return filterActiveLinks(records).sort((a, b) => b.ts - a.ts)
-  }
-
-  async function updateScreenshotLink(id: ScreenshotLinkId, patch: UpdateScreenshotLinkInput): Promise<ScreenshotLinkRecord | undefined> {
-    const current = await getScreenshotLink(id)
-    if (!current)
-      return undefined
-
-    const updated: ScreenshotLinkRecord = {
-      ...current,
-      ...patch,
-      id: current.id,
-      screenshotId: current.screenshotId,
-      ts: patch.ts ?? Date.now(),
-    }
-
-    if (!hasAnyTarget(updated))
-      throw new Error('At least one target is required: pageId/componentId/bundleId')
-
-    await idb.put(SCREENSHOT_LINKS_STORE_NAME, updated)
-    return updated
-  }
-
-  async function upsertScreenshotLink(record: ScreenshotLinkRecord): Promise<ScreenshotLinkRecord> {
-    if (!hasAnyTarget(record))
-      throw new Error('At least one target is required: pageId/componentId/bundleId')
-
-    const normalized: ScreenshotLinkRecord = {
-      ...record,
-      id: record.id ?? createLinkId(record.screenshotId),
-      ts: record.ts ?? Date.now(),
-    }
-
-    await idb.put(SCREENSHOT_LINKS_STORE_NAME, normalized)
-    return normalized
-  }
-
-  async function softDeleteScreenshotLink(id: ScreenshotLinkId): Promise<ScreenshotLinkRecord | undefined> {
-    return updateScreenshotLink(id, { deletedAt: Date.now(), ts: Date.now() })
-  }
-
-  async function restoreScreenshotLink(id: ScreenshotLinkId): Promise<ScreenshotLinkRecord | undefined> {
-    return updateScreenshotLink(id, { deletedAt: undefined, ts: Date.now() })
-  }
-
-  async function removeScreenshotLink(id: ScreenshotLinkId): Promise<void> {
-    await idb.remove(SCREENSHOT_LINKS_STORE_NAME, id)
-  }
-
-  async function clearScreenshotLinks(): Promise<void> {
-    await idb.clear(SCREENSHOT_LINKS_STORE_NAME)
-  }
-
-  async function countScreenshotLinks(): Promise<number> {
-    return idb.count(SCREENSHOT_LINKS_STORE_NAME)
-  }
-
-  async function getByPageId(pageId: string, includeDeleted = false): Promise<ScreenshotLinkRecord | undefined> {
-    return idb.withStore(SCREENSHOT_LINKS_STORE_NAME, 'readonly', (store) => {
-      return new Promise<ScreenshotLinkRecord | undefined>((resolve, reject) => {
-        const request = store.index('pageId').get(pageId)
-        request.onsuccess = () => {
-          const record = request.result as ScreenshotLinkRecord | undefined
-          if (!includeDeleted && record && !isActiveLink(record)) {
-            resolve(undefined)
-            return
-          }
-          resolve(record)
-        }
-        request.onerror = () => reject(request.error ?? new Error('Query pageId failed'))
-      })
-    })
-  }
-
-  async function getByComponentId(componentId: string, includeDeleted = false): Promise<ScreenshotLinkRecord | undefined> {
-    return idb.withStore(SCREENSHOT_LINKS_STORE_NAME, 'readonly', (store) => {
-      return new Promise<ScreenshotLinkRecord | undefined>((resolve, reject) => {
-        const request = store.index('componentId').get(componentId)
-        request.onsuccess = () => {
-          const record = request.result as ScreenshotLinkRecord | undefined
-          if (!includeDeleted && record && !isActiveLink(record)) {
-            resolve(undefined)
-            return
-          }
-          resolve(record)
-        }
-        request.onerror = () => reject(request.error ?? new Error('Query componentId failed'))
-      })
-    })
-  }
-
-  async function getByBundleId(bundleId: string, includeDeleted = false): Promise<ScreenshotLinkRecord | undefined> {
-    return idb.withStore(SCREENSHOT_LINKS_STORE_NAME, 'readonly', (store) => {
-      return new Promise<ScreenshotLinkRecord | undefined>((resolve, reject) => {
-        const request = store.index('bundleId').get(bundleId)
-        request.onsuccess = () => {
-          const record = request.result as ScreenshotLinkRecord | undefined
-          if (!includeDeleted && record && !isActiveLink(record)) {
-            resolve(undefined)
-            return
-          }
-          resolve(record)
-        }
-        request.onerror = () => reject(request.error ?? new Error('Query bundleId failed'))
-      })
-    })
-  }
-
-  async function listByTsRange(startTs: number, endTs?: number): Promise<ScreenshotLinkRecord[]> {
-    const range = typeof endTs === 'number'
-      ? IDBKeyRange.bound(startTs, endTs)
-      : IDBKeyRange.lowerBound(startTs)
-
-    return idb.withStore(SCREENSHOT_LINKS_STORE_NAME, 'readonly', (store) => {
-      return new Promise<ScreenshotLinkRecord[]>((resolve, reject) => {
-        const request = store.index('ts').getAll(range)
-        request.onsuccess = () => {
-          const records = filterActiveLinks(request.result as ScreenshotLinkRecord[])
-          resolve(records.sort((a, b) => b.ts - a.ts))
-        }
-        request.onerror = () => reject(request.error ?? new Error('Query ts failed'))
-      })
-    })
-  }
-
-  return wrapAsyncApiWithLogger(schemaLogger, {
-    createScreenshotLink,
-    getScreenshotLink,
-    getByScreenshotId,
-    listScreenshotLinks,
-    updateScreenshotLink,
-    upsertScreenshotLink,
-    softDeleteScreenshotLink,
-    restoreScreenshotLink,
-    removeScreenshotLink,
-    clearScreenshotLinks,
-    countScreenshotLinks,
-    getByPageId,
-    getByComponentId,
-    getByBundleId,
-    listByTsRange,
-  })
-}
-
-export const screenshot_links = screenshotLinksStoreDefinition
-export const screenshot_linksSchema = screenshotLinksSchema
+/**
+ * 截图链接数据库schema定义
+ *
+ * @description 定义截图链接存储对象的结构，包括字段类型、主键和索引配置
+ *
+ * @schema
+ * - id: 主键，类型为字符串
+ * - screenshotId: 截图ID，类型为字符串，具有唯一约束
+ * - pageId: 页面ID，类型为字符串，具有唯一约束
+ * - componentId: 组件ID，类型为字符串，具有唯一约束
+ * - bundleId: 包ID，类型为字符串，具有唯一约束
+ * - ts: 时间戳，类型为数字，用于排序和查询
+ * - deletedAt: 删除时间戳，类型为数字，用于软删除标记
+ *
+ * @indexes
+ * - screenshotId索引: 唯一索引，用于快速查询特定截图
+ * - pageId索引: 唯一索引，用于快速查询特定页面
+ * - componentId索引: 唯一索引，用于快速查询特定组件
+ * - bundleId索引: 唯一索引，用于快速查询特定包
+ * - ts索引: 普通索引，用于按时间戳排序和范围查询
+ *
+ * @returns 返回配置好的schema处理器
+ */
+export const ScreenshotLinksSchema = defineSchemaHandler(
+  {
+    name: 'screenshot_links',
+    options: { keyPath: 'id' },
+    record: {
+      id: { type: String },
+      screenshotId: { type: String },
+      pageId: { type: String },
+      componentId: { type: String },
+      bundleId: { type: String },
+      ts: { type: Number },
+      createdAt: { type: Number },
+      updatedAt: { type: Number },
+      deletedAt: { type: Number },
+    },
+    indexes: [
+      { name: 'screenshotId', keyPath: 'screenshotId', options: { unique: true } },
+      { name: 'pageId', keyPath: 'pageId', options: { unique: true } },
+      { name: 'componentId', keyPath: 'componentId', options: { unique: true } },
+      { name: 'bundleId', keyPath: 'bundleId', options: { unique: true } },
+      { name: 'ts', keyPath: 'ts' },
+    ],
+  },
+)

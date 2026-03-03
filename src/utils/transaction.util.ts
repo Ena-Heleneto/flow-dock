@@ -1,4 +1,9 @@
 export class IdbTransactionUtil {
+  private static toStoreDefinition(store: IdbTransactionStoreInput): IdbStoreDefinition {
+    const { name, options, indexes, record } = store
+    return { name, options, indexes, record }
+  }
+
   /**
    * 数据库名称
    * @type {number}
@@ -54,7 +59,7 @@ export class IdbTransactionUtil {
   constructor(options: IdbTransactionUtilOptions) {
     this.dbName = options.dbName
     this.version = options.version ?? 1
-    this.stores = options.stores ?? []
+    this.stores = (options.stores ?? []).map(IdbTransactionUtil.toStoreDefinition)
   }
 
   /**
@@ -306,18 +311,15 @@ export class IdbTransactionUtil {
 
   /**
    * 启动一个新的 IndexedDB 事务
-   * @param storeNames - 可选的对象存储名称，可以是单个名称字符串或名称数组。如果不提供，将使用所有已注册的存储
-   * @param mode - 事务模式，默认为 'readwrite'。可选值为 'readonly'、'readwrite'
+   * 启动时默认使用已注册的全部对象存储，并以 readwrite 模式开启
    * @returns 返回活跃事务上下文对象，包含当前事务和获取特定存储的方法
    * @throws {Error} 当请求的存储不在当前事务中时抛出错误
    */
-  async start(storeNames?: string | string[], mode: IDBTransactionMode = 'readwrite') {
+  async start() {
     const database = await this.open()
-    const names = storeNames
-      ? IdbTransactionUtil.normalizeStoreNames(storeNames)
-      : IdbTransactionUtil.normalizeStoreNames(this.stores.map(store => store.name))
+    const names = IdbTransactionUtil.normalizeStoreNames(this.stores.map(store => store.name))
     const nameSet = new Set(names)
-    const transaction = database.transaction(names, mode)
+    const transaction = database.transaction(names, 'readwrite')
     const donePromise = IdbTransactionUtil.done(transaction)
 
     this.activeContext = {

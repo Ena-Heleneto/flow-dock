@@ -88,6 +88,7 @@ export type SchemaHandlerResult<TSchema extends IdbStoreDefinition> = TSchema & 
   deleteById: (transaction: SchemaTransactionContext, key: IDBValidKey) => Promise<void>
   list: <T = SchemaRecordType<TSchema>>(transaction: SchemaTransactionContext, query?: IDBValidKey | IDBKeyRange | null) => Promise<T[]>
   findByCriteria: <T = SchemaRecordType<TSchema>>(transaction: SchemaTransactionContext, options: FindByCriteriaOptions) => Promise<T[]>
+  findAll: <T = SchemaRecordType<TSchema>>(transaction: SchemaTransactionContext) => Promise<T[]>
 }
 
 /**

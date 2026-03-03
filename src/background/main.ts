@@ -11,6 +11,27 @@ function openDatabase(dbName: string) {
   })
 }
 
+function toPreviewValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (value instanceof Blob)
+    return { __type: 'Blob', size: value.size, mime: value.type }
+
+  if (Array.isArray(value))
+    return value.map(item => toPreviewValue(item, seen))
+
+  if (value && typeof value === 'object') {
+    if (seen.has(value))
+      return '[Circular]'
+
+    seen.add(value)
+    const next: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value))
+      next[key] = toPreviewValue(item, seen)
+    return next
+  }
+
+  return value
+}
+
 function readPreviewRows(store: IDBObjectStore, limit: number) {
   return new Promise<unknown[]>((resolve, reject) => {
     const records: unknown[] = []
@@ -23,7 +44,7 @@ function readPreviewRows(store: IDBObjectStore, limit: number) {
         return
       }
 
-      records.push(cursor.value)
+      records.push(toPreviewValue(cursor.value))
       cursor.continue()
     }
 
@@ -168,15 +189,17 @@ browser.runtime.onMessage.addListener((message: unknown) => {
     return (async () => {
       await Promise.all([
         countStoreRows(dbName, PageSchema.name),
-        screenshotsSchema({ dbName }).countScreenshots(),
-        screenshotLinksSchema({ dbName }).countScreenshotLinks(),
+        countStoreRows(dbName, ScreenshotSchema.name),
+        countStoreRows(dbName, ScreenshotLinksSchema.name),
+        countStoreRows(dbName, KvConfigsSchema.name),
         clustersSchema({ dbName }).countClusters(),
         componentsSchema({ dbName }).countComponents(),
         bundleSchema({ dbName }).countBundles(),
         bundleComponentsSchema({ dbName }).countBundleComponents(),
         pageBundlesSchema({ dbName }).countPageBundles(),
         pageComponentsSchema({ dbName }).countPageComponents(),
-        kvConfigsSchema({ dbName }).countConfigs(),
+        // kvConfigsSchema({ dbName }).countConfigs(),
+
         clusterLinksSchema({ dbName }).countClusterLinks(),
       ])
 

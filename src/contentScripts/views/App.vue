@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useDraggable } from '@vueuse/core'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { sendMessage } from 'webext-bridge/content-script'
 
 /**
@@ -20,6 +20,9 @@ const hasMoved = ref<boolean>(false)
  */
 const startPos = ref<{ x: number, y: number } | null>(null)
 
+const isProcessing = ref<boolean>(false)
+const statusMessage = ref<string>('')
+
 /**
  * 处理保存页面的异步函数
  * 向后台发送保存页面的消息，并根据结果进行日志记录
@@ -29,13 +32,65 @@ const startPos = ref<{ x: number, y: number } | null>(null)
  * @returns {Promise<void>}
  * @throws {Error} 当消息发送失败时捕获错误并记录
  */
+async function handleAnalyzePage() {
+  const analyzeResult = await sendMessage('pages/analyze', {}, 'background')
+  logger.success('analyze-page success', analyzeResult)
+  return analyzeResult
+}
+
+function isSaveSuccess(result: unknown) {
+  if (!result || typeof result !== 'object')
+    return false
+  const code = (result as { code?: unknown }).code
+  return code === 0
+}
+
 async function handleSavePage() {
+  if (isProcessing.value)
+    return
+
+  isProcessing.value = true
+  statusMessage.value = '处理中...'
+
   try {
     const result = await sendMessage('pages/save', {}, 'background')
     logger.success('save-page success', result)
+    if (isSaveSuccess(result)) {
+      await handleAnalyzePage()
+      statusMessage.value = '保存并分析成功'
+    }
+    else {
+      statusMessage.value = '保存未成功'
+    }
   }
-  catch (error) {
+  catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('Extension context invalidated')) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 300))
+        const retryResult = await sendMessage('pages/save', {}, 'background')
+        logger.success('save-page success after retry', retryResult)
+        if (isSaveSuccess(retryResult)) {
+          await handleAnalyzePage()
+          statusMessage.value = '重试后保存并分析成功'
+        }
+        else {
+          statusMessage.value = '重试后保存未成功'
+        }
+      }
+      catch (retryError) {
+        logger.error('save-page retry failed', retryError)
+        statusMessage.value = '重试失败'
+      }
+    }
+    else {
+      statusMessage.value = '保存失败'
+    }
+
     logger.error('save-page failed', error)
+  }
+  finally {
+    isProcessing.value = false
   }
 }
 
@@ -113,12 +168,95 @@ const dragStyle = computed(() => [
   },
 ])
 
+/**
+ * 判断某个元素或资源是否存在
+ * @type {Ref<boolean>}
+ */
+const isExists = ref<boolean>(false)
+
+/**
+ * 当前页面的 URL 地址
+ * 通过 ref 包装，使其成为响应式数据
+ * 初始值为 location.href（当前浏览器地址栏的完整 URL）
+ *
+ * @type {Ref<string>}
+ */
+const currentUrl = ref<string>(location.href)
+
+/**
+ * 处理页面位置变化
+ * 监听URL变化，当URL发生改变时更新当前URL值并检查页面是否存在
+ * @returns {void}
+ */
+function handleLocationChange() {
+  const nextUrl = location.href
+  if (nextUrl === currentUrl.value)
+    return
+  currentUrl.value = nextUrl
+  void handleExistsPages()
+}
+
+/**
+ * 保存原始的 history.pushState 方法的引用
+ * 用于后续可能的方法拦截或恢复操作
+ * @type {Function}
+ */
+const originalPushState = history.pushState
+
+/**
+ * 保存原始的 history.replaceState 方法
+ * 用于后续恢复或调用原生的历史记录替换功能
+ * @type {Function}
+ */
+const originalReplaceState = history.replaceState
+
+/**
+ * 重写浏览器历史记录方法
+ *
+ * 拦截 history.pushState 和 history.replaceState 方法，
+ * 在调用原始方法后触发位置变化的处理程序。
+ * 用于监听和响应浏览器历史记录的变更事件。
+ *
+ * @function overrideHistoryMethods
+ * @returns {void}
+ */
+function overrideHistoryMethods() {
+  history.pushState = function (...args) {
+    originalPushState.apply(this, args)
+    handleLocationChange()
+  }
+
+  history.replaceState = function (...args) {
+    originalReplaceState.apply(this, args)
+    handleLocationChange()
+  }
+}
+
+/**
+ * 恢复历史记录方法
+ * 将浏览器的 history.pushState 和 history.replaceState 方法
+ * 恢复为原始的实现，用于撤销之前进行的方法重写或拦截
+ */
+function restoreHistoryMethods() {
+  history.pushState = originalPushState
+  history.replaceState = originalReplaceState
+}
+
 onMounted(() => {
   const margin = 20
   const size = 40
   x.value = window.innerWidth - margin - size
   y.value = window.innerHeight - margin - size
   void handleExistsPages()
+  overrideHistoryMethods()
+  window.addEventListener('popstate', handleLocationChange)
+  window.addEventListener('hashchange', handleLocationChange)
+})
+
+onBeforeUnmount(() => {
+  restoreHistoryMethods()
+  window.removeEventListener('popstate', handleLocationChange)
+  window.removeEventListener('hashchange', handleLocationChange)
 })
 
 /**
@@ -134,8 +272,8 @@ onMounted(() => {
  */
 async function handleExistsPages() {
   try {
-    const res = await sendMessage('pages/exists', {}, 'background')
-    logger.info('exists-pages result', res)
+    const { data } = await sendMessage('pages/exists', {}, 'background')
+    isExists.value = data
   }
   catch (error: unknown) {
     logger.error('exists-pages failed', error)
@@ -145,24 +283,19 @@ async function handleExistsPages() {
 
 <template>
   <div
-    ref="DragTargetRef"
-    :style="dragStyle"
-    fixed="~"
-    z="100"
-    flex="~"
-    font="sans"
-    justify="center"
-    items="center"
-    select="none"
-    leading="1em"
-    w="100px"
-    h="50px"
-    bg="#7C3CFF hover:#6A2BFF"
+    ref="DragTargetRef" :style="dragStyle" fixed="~" z="100" flex="~ col" gap="2" font="sans" justify="center"
+    items="center" select="none" leading="1em" p="2" bg="#7C3CFF hover:#6A2BFF"
   >
-    <div />
+    <div text="white lg">
+      {{ isExists ? '已存在' : '未存在' }}
+    </div>
+    <div v-if="statusMessage" text="white xs" max-w="44" text-center>
+      {{ statusMessage }}
+    </div>
     <button
-      class="flex w-10 h-10 rounded-full shadow cursor-pointer border-none"
-      @click.stop="!hasMoved && handleSavePage()"
+      class="flex w-10 h-10 rounded-full shadow cursor-pointer border-none disabled:cursor-not-allowed disabled:opacity-60"
+      :disabled="isProcessing"
+      @click.stop="!hasMoved && !isProcessing && handleSavePage()"
     >
       <div i-mdi:clipboard-text-clock-outline block="~" m="auto" text="white lg" />
 
