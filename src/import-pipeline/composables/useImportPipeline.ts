@@ -20,11 +20,25 @@ import type {
   RequestMethod,
   RequestMode,
   RunStatus,
+  SavedImportPipelineConfig,
 } from '../types'
 import { useImportPipelineTemplate } from './useImportPipelineTemplate'
+import { useIdb } from '~/composables/useIdb'
+
+const FLOW_DOCK_DB_NAME = 'flow-dock-dev'
+const IMPORT_PIPELINE_CONFIG_STORE = 'import_pipeline_configs'
 
 export function useImportPipeline() {
   const { parseJsonObject, buildRequestBody } = useImportPipelineTemplate()
+  const idb = useIdb({
+    dbName: FLOW_DOCK_DB_NAME,
+    version: 1,
+    stores: [{
+      name: IMPORT_PIPELINE_CONFIG_STORE,
+      options: { keyPath: 'id' },
+      indexes: [{ name: 'updatedAt', keyPath: 'updatedAt' }],
+    }],
+  })
 
   const endpoint = ref('')
   const method = ref<RequestMethod>(DEFAULT_METHOD)
@@ -48,6 +62,9 @@ export function useImportPipeline() {
   const result = ref<BatchResult>({ total: 0, success: 0, failed: 0 })
   const logs = ref<string[]>([READY_MESSAGE])
   const stopRequested = ref(false)
+  const savedConfigs = ref<SavedImportPipelineConfig[]>([])
+  const selectedConfigId = ref('')
+  const configNameInput = ref('')
 
   const canRun = computed(() => {
     return runStatus.value !== 'running'
@@ -174,6 +191,197 @@ export function useImportPipeline() {
 
   function appendLog(message: string) {
     logs.value.unshift(`[${new Date().toLocaleTimeString()}] ${message}`)
+  }
+
+  function buildDefaultConfigName() {
+    const now = new Date()
+    const pad2 = (num: number) => String(num).padStart(2, '0')
+    return `配置 ${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
+  }
+
+  function normalizeSavedConfig(raw: unknown): SavedImportPipelineConfig | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+      return null
+
+    const record = raw as Record<string, unknown>
+    if (typeof record.id !== 'string' || record.id.length === 0)
+      return null
+
+    if (typeof record.endpoint !== 'string')
+      return null
+    if (record.method !== 'POST' && record.method !== 'PUT')
+      return null
+    if (record.requestMode !== 'raw-item' && record.requestMode !== 'wrapped-item')
+      return null
+
+    const createdAt = typeof record.createdAt === 'number' ? record.createdAt : Date.now()
+    const updatedAt = typeof record.updatedAt === 'number' ? record.updatedAt : createdAt
+
+    return {
+      id: record.id,
+      name: typeof record.name === 'string' && record.name.trim().length > 0 ? record.name : '未命名配置',
+      endpoint: record.endpoint,
+      method: record.method,
+      batchSize: typeof record.batchSize === 'number' ? Math.max(1, Math.trunc(record.batchSize) || 1) : 1,
+      requestMode: record.requestMode,
+      wrapperKey: typeof record.wrapperKey === 'string' ? record.wrapperKey : DEFAULT_WRAPPER_KEY,
+      autoExtractObjectField: typeof record.autoExtractObjectField === 'boolean' ? record.autoExtractObjectField : true,
+      headersText: typeof record.headersText === 'string' ? record.headersText : DEFAULT_HEADERS_TEXT,
+      fixedParamsText: typeof record.fixedParamsText === 'string' ? record.fixedParamsText : DEFAULT_FIXED_PARAMS_TEXT,
+      dynamicParamsText: typeof record.dynamicParamsText === 'string' ? record.dynamicParamsText : DEFAULT_DYNAMIC_PARAMS_TEXT,
+      inputText: typeof record.inputText === 'string' ? record.inputText : DEFAULT_INPUT_TEXT,
+      createdAt,
+      updatedAt,
+    }
+  }
+
+  async function refreshSavedConfigList() {
+    const rows = await idb.getAll<unknown>(IMPORT_PIPELINE_CONFIG_STORE)
+    const normalized = rows
+      .map(normalizeSavedConfig)
+      .filter((row): row is SavedImportPipelineConfig => !!row)
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+
+    savedConfigs.value = normalized
+
+    if (normalized.length === 0) {
+      selectedConfigId.value = ''
+      return
+    }
+
+    const selectedExists = normalized.some(row => row.id === selectedConfigId.value)
+    if (!selectedExists)
+      selectedConfigId.value = normalized[0].id
+  }
+
+  function applySavedConfig(config: SavedImportPipelineConfig) {
+    endpoint.value = config.endpoint
+    method.value = config.method
+    batchSize.value = config.batchSize
+    requestMode.value = config.requestMode
+    wrapperKey.value = config.wrapperKey
+    autoExtractObjectField.value = config.autoExtractObjectField
+    headersText.value = config.headersText
+    fixedParamsText.value = config.fixedParamsText
+    dynamicParamsText.value = config.dynamicParamsText
+    inputText.value = config.inputText
+  }
+
+  function buildCurrentConfigSnapshot(id: string, name: string, createdAt: number): SavedImportPipelineConfig {
+    return {
+      id,
+      name,
+      endpoint: endpoint.value,
+      method: method.value,
+      batchSize: Math.max(1, Math.trunc(batchSize.value) || 1),
+      requestMode: requestMode.value,
+      wrapperKey: wrapperKey.value,
+      autoExtractObjectField: autoExtractObjectField.value,
+      headersText: headersText.value,
+      fixedParamsText: fixedParamsText.value,
+      dynamicParamsText: dynamicParamsText.value,
+      inputText: inputText.value,
+      createdAt,
+      updatedAt: Date.now(),
+    }
+  }
+
+  function findSelectedConfig() {
+    if (!selectedConfigId.value)
+      return null
+    return savedConfigs.value.find(row => row.id === selectedConfigId.value) ?? null
+  }
+
+  async function loadSavedConfig(showLog = true) {
+    try {
+      const targetId = selectedConfigId.value
+      if (!targetId) {
+        if (showLog)
+          appendLog('请先在配置列表中选择一条配置。')
+        return false
+      }
+
+      const raw = await idb.get<unknown>(IMPORT_PIPELINE_CONFIG_STORE, targetId)
+      const saved = normalizeSavedConfig(raw)
+      if (!saved) {
+        await refreshSavedConfigList()
+        if (showLog)
+          appendLog('未找到所选配置，可能已被删除。')
+        return false
+      }
+
+      applySavedConfig(saved)
+      parseInput()
+      if (showLog)
+        appendLog(`已加载配置：${saved.name}`)
+      return true
+    }
+    catch (error) {
+      appendLog(`加载配置失败：${error instanceof Error ? error.message : '未知错误'}`)
+      return false
+    }
+  }
+
+  async function saveCurrentConfig() {
+    const selected = findSelectedConfig()
+    if (!selected) {
+      appendLog('当前没有已选配置，请先输入名称后新建保存。')
+      return false
+    }
+
+    try {
+      const snapshot = buildCurrentConfigSnapshot(selected.id, selected.name, selected.createdAt)
+      await idb.put(IMPORT_PIPELINE_CONFIG_STORE, snapshot)
+      await refreshSavedConfigList()
+      appendLog(`已覆盖保存配置：${snapshot.name}`)
+      return true
+    }
+    catch (error) {
+      appendLog(`保存配置失败：${error instanceof Error ? error.message : '未知错误'}`)
+      return false
+    }
+  }
+
+  async function createConfigFromCurrent() {
+    const trimmedName = configNameInput.value.trim()
+    const name = trimmedName || buildDefaultConfigName()
+
+    try {
+      const now = Date.now()
+      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${now}-${Math.random().toString(36).slice(2, 10)}`
+      const snapshot = buildCurrentConfigSnapshot(id, name, now)
+      await idb.put(IMPORT_PIPELINE_CONFIG_STORE, snapshot)
+      await refreshSavedConfigList()
+      selectedConfigId.value = id
+      configNameInput.value = ''
+      appendLog(`已新建配置：${name}`)
+      return true
+    }
+    catch (error) {
+      appendLog(`新建配置失败：${error instanceof Error ? error.message : '未知错误'}`)
+      return false
+    }
+  }
+
+  async function deleteSelectedConfig() {
+    const selected = findSelectedConfig()
+    if (!selected) {
+      appendLog('当前没有可删除的已选配置。')
+      return false
+    }
+
+    try {
+      await idb.remove(IMPORT_PIPELINE_CONFIG_STORE, selected.id)
+      await refreshSavedConfigList()
+      appendLog(`已删除配置：${selected.name}`)
+      return true
+    }
+    catch (error) {
+      appendLog(`删除配置失败：${error instanceof Error ? error.message : '未知错误'}`)
+      return false
+    }
   }
 
   function toObjectArray(input: unknown): Record<string, unknown>[] {
@@ -445,6 +653,21 @@ export function useImportPipeline() {
   })
 
   parseInput()
+  onMounted(() => {
+    void (async () => {
+      try {
+        await refreshSavedConfigList()
+        if (savedConfigs.value.length > 0) {
+          const loaded = await loadSavedConfig(false)
+          if (loaded)
+            appendLog(`已自动加载最近配置：${savedConfigs.value[0].name}`)
+        }
+      }
+      catch (error) {
+        appendLog(`初始化配置列表失败：${error instanceof Error ? error.message : '未知错误'}`)
+      }
+    })()
+  })
 
   return {
     endpoint,
@@ -477,5 +700,12 @@ export function useImportPipeline() {
     runPipeline,
     requestStop,
     resetPipeline,
+    saveCurrentConfig,
+    loadSavedConfig,
+    savedConfigs,
+    selectedConfigId,
+    configNameInput,
+    createConfigFromCurrent,
+    deleteSelectedConfig,
   }
 }

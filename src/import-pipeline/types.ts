@@ -19,4 +19,27 @@ export interface CookieDiagnostic {
   messages: string[]
 }
 
+export interface SavedImportPipelineConfig {
+  id: string
+  name: string
+  createdAt: number
+  endpoint: string
+  method: RequestMethod
+  batchSize: number
+  requestMode: RequestMode
+  wrapperKey: string
+  autoExtractObjectField: boolean
+  headersText: string
+  fixedParamsText: string
+  dynamicParamsText: string
+  inputText: string
+  updatedAt: number
+}
+
+export interface SavedImportPipelineConfigItem {
+  id: string
+  name: string
+  updatedAt: number
+}
+
 export type JsonObject = Record<string, unknown>

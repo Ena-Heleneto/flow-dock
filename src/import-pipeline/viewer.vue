@@ -38,7 +38,30 @@ const {
   runPipeline,
   requestStop,
   resetPipeline,
+  savedConfigs,
+  selectedConfigId,
+  configNameInput,
+  saveCurrentConfig,
+  loadSavedConfig,
+  createConfigFromCurrent,
+  deleteSelectedConfig,
 } = useImportPipeline()
+
+async function handleSaveConfig() {
+  await saveCurrentConfig()
+}
+
+async function handleLoadConfig() {
+  await loadSavedConfig()
+}
+
+async function handleCreateConfig() {
+  await createConfigFromCurrent()
+}
+
+async function handleDeleteConfig() {
+  await deleteSelectedConfig()
+}
 </script>
 
 <template>
@@ -66,15 +89,22 @@ const {
 
       <div class="grid gap-4 lg:grid-cols-[320px_1fr]">
         <PipelineSidebar
+          v-model:selected-config-id="selectedConfigId"
+          v-model:config-name-input="configNameInput"
           v-model:headers-text="headersText"
           v-model:fixed-params-text="fixedParamsText"
           v-model:dynamic-params-text="dynamicParamsText"
           v-model:wrapper-key="wrapperKey"
+          :saved-configs="savedConfigs"
           :request-mode="requestMode"
           :cookie-diagnostic="cookieDiagnostic"
           :result="result"
           :running-batch="runningBatch"
           :total-batch="totalBatch"
+          @load-config="handleLoadConfig"
+          @save-config="handleSaveConfig"
+          @create-config="handleCreateConfig"
+          @delete-config="handleDeleteConfig"
         />
 
         <section class="grid gap-4 md:grid-cols-2">

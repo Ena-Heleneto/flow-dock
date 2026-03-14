@@ -73,7 +73,7 @@ export async function getCurrentTab(): Promise<Tabs.Tab | undefined> {
   return tabs[0]
 }
 
-export interface PageMetrics {
+interface NormalizedPageMetrics {
   viewportWidth: number
   viewportHeight: number
   pageHeight: number
@@ -91,7 +91,7 @@ export interface PageMetrics {
  * @param metrics - 原始的页面指标数据对象
  * @returns 规范化后的页面指标对象，其中所有数值都已调整到有效范围内
  */
-export function normalizeMetrics(metrics: PageMetrics): PageMetrics {
+export function normalizeMetrics(metrics: NormalizedPageMetrics): NormalizedPageMetrics {
   return {
     viewportWidth: Math.max(1, Math.floor(metrics.viewportWidth)),
     viewportHeight: Math.max(1, Math.floor(metrics.viewportHeight)),
