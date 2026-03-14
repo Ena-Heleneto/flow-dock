@@ -82,6 +82,7 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       input: {
         options: r('src/database/index.html'),
+        importPipeline: r('src/import-pipeline/index.html'),
         globalSettings: r('src/options/index.html'),
         popup: r('src/popup/index.html'),
         sidepanel: r('src/sidepanel/index.html'),
