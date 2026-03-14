@@ -180,7 +180,10 @@ browser.runtime.onMessage.addListener((message: unknown) => {
     limit?: number
   }
 
-  if (!payload?.type?.startsWith('db-viewer/'))
+  if (!payload?.type)
+    return
+
+  if (!payload.type.startsWith('db-viewer/'))
     return
 
   const dbName = payload.dbName || 'flow-dock-dev'

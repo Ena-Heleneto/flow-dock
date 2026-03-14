@@ -1,3 +1,4 @@
+import { sendMessage } from 'webext-bridge/window'
 import {
   AUTO_EXTRACT_CANDIDATES,
   DEFAULT_BATCH_SIZE,
@@ -23,22 +24,9 @@ import type {
   SavedImportPipelineConfig,
 } from '../types'
 import { useImportPipelineTemplate } from './useImportPipelineTemplate'
-import { useIdb } from '~/composables/useIdb'
-
-const FLOW_DOCK_DB_NAME = 'flow-dock-dev'
-const IMPORT_PIPELINE_CONFIG_STORE = 'import_pipeline_configs'
 
 export function useImportPipeline() {
   const { parseJsonObject, buildRequestBody } = useImportPipelineTemplate()
-  const idb = useIdb({
-    dbName: FLOW_DOCK_DB_NAME,
-    version: 1,
-    stores: [{
-      name: IMPORT_PIPELINE_CONFIG_STORE,
-      options: { keyPath: 'id' },
-      indexes: [{ name: 'updatedAt', keyPath: 'updatedAt' }],
-    }],
-  })
 
   const endpoint = ref('')
   const method = ref<RequestMethod>(DEFAULT_METHOD)
@@ -199,48 +187,8 @@ export function useImportPipeline() {
     return `配置 ${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
   }
 
-  function normalizeSavedConfig(raw: unknown): SavedImportPipelineConfig | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw))
-      return null
-
-    const record = raw as Record<string, unknown>
-    if (typeof record.id !== 'string' || record.id.length === 0)
-      return null
-
-    if (typeof record.endpoint !== 'string')
-      return null
-    if (record.method !== 'POST' && record.method !== 'PUT')
-      return null
-    if (record.requestMode !== 'raw-item' && record.requestMode !== 'wrapped-item')
-      return null
-
-    const createdAt = typeof record.createdAt === 'number' ? record.createdAt : Date.now()
-    const updatedAt = typeof record.updatedAt === 'number' ? record.updatedAt : createdAt
-
-    return {
-      id: record.id,
-      name: typeof record.name === 'string' && record.name.trim().length > 0 ? record.name : '未命名配置',
-      endpoint: record.endpoint,
-      method: record.method,
-      batchSize: typeof record.batchSize === 'number' ? Math.max(1, Math.trunc(record.batchSize) || 1) : 1,
-      requestMode: record.requestMode,
-      wrapperKey: typeof record.wrapperKey === 'string' ? record.wrapperKey : DEFAULT_WRAPPER_KEY,
-      autoExtractObjectField: typeof record.autoExtractObjectField === 'boolean' ? record.autoExtractObjectField : true,
-      headersText: typeof record.headersText === 'string' ? record.headersText : DEFAULT_HEADERS_TEXT,
-      fixedParamsText: typeof record.fixedParamsText === 'string' ? record.fixedParamsText : DEFAULT_FIXED_PARAMS_TEXT,
-      dynamicParamsText: typeof record.dynamicParamsText === 'string' ? record.dynamicParamsText : DEFAULT_DYNAMIC_PARAMS_TEXT,
-      inputText: typeof record.inputText === 'string' ? record.inputText : DEFAULT_INPUT_TEXT,
-      createdAt,
-      updatedAt,
-    }
-  }
-
   async function refreshSavedConfigList() {
-    const rows = await idb.getAll<unknown>(IMPORT_PIPELINE_CONFIG_STORE)
-    const normalized = rows
-      .map(normalizeSavedConfig)
-      .filter((row): row is SavedImportPipelineConfig => !!row)
-      .sort((left, right) => right.updatedAt - left.updatedAt)
+    const normalized = await sendMessage('list-import-pipeline-configs', {}, 'background')
 
     savedConfigs.value = normalized
 
@@ -301,8 +249,7 @@ export function useImportPipeline() {
         return false
       }
 
-      const raw = await idb.get<unknown>(IMPORT_PIPELINE_CONFIG_STORE, targetId)
-      const saved = normalizeSavedConfig(raw)
+      const saved = await sendMessage('get-import-pipeline-config', { id: targetId }, 'background')
       if (!saved) {
         await refreshSavedConfigList()
         if (showLog)
@@ -331,7 +278,7 @@ export function useImportPipeline() {
 
     try {
       const snapshot = buildCurrentConfigSnapshot(selected.id, selected.name, selected.createdAt)
-      await idb.put(IMPORT_PIPELINE_CONFIG_STORE, snapshot)
+      await sendMessage('save-import-pipeline-config', snapshot, 'background')
       await refreshSavedConfigList()
       appendLog(`已覆盖保存配置：${snapshot.name}`)
       return true
@@ -352,7 +299,7 @@ export function useImportPipeline() {
         ? crypto.randomUUID()
         : `${now}-${Math.random().toString(36).slice(2, 10)}`
       const snapshot = buildCurrentConfigSnapshot(id, name, now)
-      await idb.put(IMPORT_PIPELINE_CONFIG_STORE, snapshot)
+      await sendMessage('save-import-pipeline-config', snapshot, 'background')
       await refreshSavedConfigList()
       selectedConfigId.value = id
       configNameInput.value = ''
@@ -373,7 +320,7 @@ export function useImportPipeline() {
     }
 
     try {
-      await idb.remove(IMPORT_PIPELINE_CONFIG_STORE, selected.id)
+      await sendMessage('delete-import-pipeline-config', { id: selected.id }, 'background')
       await refreshSavedConfigList()
       appendLog(`已删除配置：${selected.name}`)
       return true
