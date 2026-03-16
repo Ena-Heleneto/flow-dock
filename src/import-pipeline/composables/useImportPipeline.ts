@@ -24,9 +24,16 @@ import type {
   SavedImportPipelineConfig,
 } from '../types'
 import { useImportPipelineTemplate } from './useImportPipelineTemplate'
+import { useXls } from './useXls'
 
 export function useImportPipeline() {
   const { parseJsonObject, buildRequestBody } = useImportPipelineTemplate()
+  const { parseExcelFile } = useXls()
+
+  const waitForUiPaint = async () => {
+    await nextTick()
+    await new Promise<void>(resolve => setTimeout(resolve, 30))
+  }
 
   const endpoint = ref('')
   const method = ref<RequestMethod>(DEFAULT_METHOD)
@@ -42,6 +49,7 @@ export function useImportPipeline() {
 
   const parsedItems = ref<Record<string, unknown>[]>([])
   const parseError = ref('')
+  const isImporting = ref(false)
   const previewIndex = ref(0)
 
   const runStatus = ref<RunStatus>('idle')
@@ -367,21 +375,55 @@ export function useImportPipeline() {
     }
   }
 
-  function handleFileChange(event: Event) {
+  async function handleFileChange(event: Event) {
     const target = event.target as HTMLInputElement
     const file = target.files?.[0]
     if (!file)
       return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      inputText.value = String(reader.result ?? '')
-      parseInput()
+    if (isImporting.value)
+      return
+
+    const readTextFile = () => new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result ?? ''))
+      reader.onerror = () => reject(new Error('读取文件失败。'))
+      reader.readAsText(file, 'utf-8')
+    })
+
+    const loadingStart = Date.now()
+    isImporting.value = true
+    appendLog(`开始导入文件：${file.name}`)
+    await waitForUiPaint()
+
+    const lowerName = file.name.toLowerCase()
+    const isExcelFile = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')
+
+    try {
+      if (isExcelFile) {
+        const rows = await parseExcelFile(file)
+        inputText.value = JSON.stringify(rows, null, 2)
+        parseInput()
+        appendLog(`Excel 导入成功，共 ${rows.length} 条记录。`)
+      }
+      else {
+        inputText.value = await readTextFile()
+        parseInput()
+        appendLog('文件导入成功。')
+      }
     }
-    reader.onerror = () => {
-      appendLog('读取文件失败。')
+    catch (error) {
+      appendLog(`读取文件失败：${error instanceof Error ? error.message : '未知错误'}`)
     }
-    reader.readAsText(file, 'utf-8')
+    finally {
+      const elapsed = Date.now() - loadingStart
+      const minDisplay = 350
+      if (elapsed < minDisplay)
+        await new Promise<void>(resolve => setTimeout(resolve, minDisplay - elapsed))
+
+      isImporting.value = false
+      target.value = ''
+    }
   }
 
   function isForbiddenRequestHeaderName(headerName: string): boolean {
@@ -629,6 +671,7 @@ export function useImportPipeline() {
     inputText,
     parsedItems,
     parseError,
+    isImporting,
     previewIndex,
     runStatus,
     runningBatch,

@@ -20,6 +20,7 @@ const {
   inputText,
   parsedItems,
   parseError,
+  isImporting,
   previewIndex,
   runStatus,
   runningBatch,
@@ -111,6 +112,7 @@ async function handleDeleteConfig() {
           <PipelineInputPanel
             v-model:input-text="inputText"
             :parse-error="parseError"
+            :is-importing="isImporting"
             :preview-items="previewItems"
             @parse-input="parseInput"
             @file-change="handleFileChange"
@@ -127,5 +129,15 @@ async function handleDeleteConfig() {
         </section>
       </div>
     </section>
+
+    <div
+      v-if="isImporting"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-[1.5px]"
+    >
+      <div class="flex items-center gap-3 rounded-xl border border-teal-200 bg-white px-4 py-3 text-sm text-teal-700 shadow-xl">
+        <span class="h-4 w-4 animate-spin rounded-full border-2 border-teal-500 border-r-transparent" />
+        <span>正在解析导入文件，请稍候...</span>
+      </div>
+    </div>
   </main>
 </template>
