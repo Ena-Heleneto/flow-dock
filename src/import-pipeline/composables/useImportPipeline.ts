@@ -1,4 +1,4 @@
-import { sendMessage } from 'webext-bridge/window'
+import { sendMessage } from 'webext-bridge/options'
 import {
   AUTO_EXTRACT_CANDIDATES,
   DEFAULT_BATCH_SIZE,
