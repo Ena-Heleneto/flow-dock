@@ -30,14 +30,13 @@
     "postinstall": "simple-git-hooks",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@techstark/opencv-js": "4.12.0-release.1"
-  },
+
   "devDependencies": {
     "@antfu/eslint-config": "^2.27.0",
     "@ffflorian/jszip-cli": "^3.8.5",
     "@iconify/json": "^2.2.444",
     "@playwright/test": "^1.46.1",
+    "@techstark/opencv-js": "4.12.0-release.1",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.5.0",
     "@types/webextension-polyfill": "^0.12.0",
@@ -71,7 +70,8 @@
     "vue-demi": "^0.14.10",
     "web-ext": "^8.2.0",
     "webext-bridge": "^6.0.1",
-    "webextension-polyfill": "^0.12.0"
+    "webextension-polyfill": "^0.12.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged"
