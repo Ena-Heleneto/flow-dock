@@ -1,18 +1,9 @@
 <script setup lang="ts">
 import type { RunStatus } from '../types'
 
-defineProps<{
-  canRun: boolean
-  runStatus: RunStatus
-  statusTone: string
-  statusText: string
-}>()
+defineProps<{ canRun: boolean, runStatus: RunStatus, statusTone: string, statusText: string }>()
 
-const emit = defineEmits<{
-  run: []
-  stop: []
-  reset: []
-}>()
+const emit = defineEmits<{ run: [], stop: [], reset: [] }>()
 </script>
 
 <template>

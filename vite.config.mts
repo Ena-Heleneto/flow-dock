@@ -9,7 +9,7 @@ import IconsResolver from 'unplugin-icons/resolver'
 import Components from 'unplugin-vue-components/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import UnoCSS from 'unocss/vite'
-import { isDev, port, r } from './scripts/utils'
+import { extensionDistDir, isDev, port, r } from './scripts/utils'
 import packageJson from './package.json'
 
 export const sharedConfig: UserConfig = {
@@ -75,7 +75,7 @@ export default defineConfig(({ command }) => ({
   },
   build: {
     watch: isDev ? {} : undefined,
-    outDir: r('extension/dist'),
+    outDir: extensionDistDir,
     emptyOutDir: false,
     sourcemap: isDev ? 'inline' : false,
     minify: false,

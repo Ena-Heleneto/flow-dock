@@ -6,9 +6,7 @@ const props = defineProps<{
   mergedPreviewText: string
 }>()
 
-const emit = defineEmits<{
-  'update:previewIndex': [value: number]
-}>()
+const emit = defineEmits<{ 'update:previewIndex': [value: number] }>()
 
 const previewIndexModel = computed({
   get: () => props.previewIndex,
