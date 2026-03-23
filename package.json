@@ -1,6 +1,6 @@
 {
-  "name": "vitesse-webext",
-  "displayName": "Vitesse WebExt",
+  "name": "ena-work-tool",
+  "displayName": "Ena Work Tool",
   "version": "0.0.1",
   "private": true,
   "packageManager": "pnpm@10.30.3",

@@ -27,7 +27,11 @@ pnpm exec jszip-cli add dist/unpacked/chrome/* -o ./dist/unpacked/extension.chro
 pnpm exec jszip-cli add dist/unpacked/firefox/* -o ./dist/unpacked/extension.firefox.zip
 
 if [[ ! -f "$KEY_PATH" ]]; then
-	openssl genrsa -out "$KEY_PATH" 2048
+	if command -v openssl >/dev/null 2>&1; then
+		openssl genrsa -out "$KEY_PATH" 2048
+	else
+		node -e "const { generateKeyPairSync } = require('node:crypto'); const { writeFileSync } = require('node:fs'); const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs1', format: 'pem' } }); writeFileSync(process.argv[1], privateKey);" "$KEY_PATH"
+	fi
 fi
 
 pnpm exec crx pack dist/unpacked/chrome -o ./dist/unpacked/extension.chrome.crx -p "$KEY_PATH"

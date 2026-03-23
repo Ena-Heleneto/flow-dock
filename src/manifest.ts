@@ -25,7 +25,7 @@ export async function getManifest() {
       ? { scripts: ['dist/background/index.mjs'], type: 'module' }
       : { service_worker: 'dist/background/index.mjs', type: 'module' },
     // icons: { 16: 'assets/icon-512.png', 48: 'assets/icon-512.png', 128: 'assets/icon-512.png' },
-    permissions: ['tabs', 'storage', 'activeTab', 'sidePanel', 'scripting', 'downloads', 'offscreen'],
+    permissions: ['tabs', 'storage', 'sidePanel', 'scripting', 'downloads'],
     host_permissions: ['*://*/*', '<all_urls>'],
     content_scripts: [
       {

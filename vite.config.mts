@@ -86,7 +86,6 @@ export default defineConfig(({ command }) => ({
         globalSettings: r('src/options/index.html'),
         popup: r('src/popup/index.html'),
         sidepanel: r('src/sidepanel/index.html'),
-        offscreen: r('src/offscreen/index.html'),
       },
     },
   },
