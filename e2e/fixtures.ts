@@ -28,11 +28,11 @@ export const test = base.extend<{
   },
   extensionId: async ({ context }, use) => {
     // for manifest v3:
-    let [background] = context.serviceWorkers()
-    if (!background)
-      background = await context.waitForEvent('serviceworker')
+    let [serviceWorker] = context.serviceWorkers()
+    if (!serviceWorker)
+      serviceWorker = await context.waitForEvent('serviceworker')
 
-    const extensionId = background.url().split('/')[2]
+    const extensionId = serviceWorker.url().split('/')[2]
     await use(extensionId)
   },
 })

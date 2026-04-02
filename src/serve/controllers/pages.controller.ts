@@ -1,9 +1,9 @@
 // import { PagesService } from '../services/pages.service'
 // import { ScreenshotsService } from '../services/screenshots.service'
 // import type { SavePageInput, SavePageResult } from '../services/pages.service'
-// import { PAGES_STORE_NAME, pages, pagesSchema } from '../../schemas/pages.schema'
-// import { SCREENSHOTS_STORE_NAME, screenshots } from '../../schemas/screenshots.schema'
-// import { SCREENSHOT_LINKS_STORE_NAME, screenshot_links } from '../../schemas/screenshot_links.schema'
+// import { PAGES_STORE_NAME, pages, pagesSchema } from '../schemas/pages.schema'
+// import { SCREENSHOTS_STORE_NAME, screenshots } from '../schemas/screenshots.schema'
+// import { SCREENSHOT_LINKS_STORE_NAME, screenshot_links } from '../schemas/screenshot_links.schema'
 // import { useIdb } from '../../composables/useIdb'
 
 // interface SavePageMessage {

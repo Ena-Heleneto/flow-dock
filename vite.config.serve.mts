@@ -17,12 +17,12 @@ export default defineConfig({
     watch: isDev
       ? {}
       : undefined,
-    outDir: r(extensionDistDir, 'background'),
+    outDir: r(extensionDistDir, 'serve'),
     cssCodeSplit: false,
     emptyOutDir: false,
     sourcemap: false,
     lib: {
-      entry: r('src/background/main.ts'),
+      entry: r('src/serve/main.ts'),
       formats: ['es'],
     },
     rollupOptions: {

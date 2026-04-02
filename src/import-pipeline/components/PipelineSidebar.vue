@@ -23,10 +23,10 @@ const emit = defineEmits<{
   'update:fixedParamsText': [value: string]
   'update:dynamicParamsText': [value: string]
   'update:wrapperKey': [value: string]
-  'load-config': []
-  'save-config': []
-  'create-config': []
-  'delete-config': []
+  'loadConfig': []
+  'saveConfig': []
+  'createConfig': []
+  'deleteConfig': []
 }>()
 
 const selectedConfigIdModel = computed({
@@ -81,10 +81,10 @@ const wrapperKeyModel = computed({
         共 {{ savedConfigs.length }} 条配置
       </p>
       <div class="mt-2 grid grid-cols-2 gap-2">
-        <button class="btn !h-8 !rounded-md !px-2 !text-xs" @click="emit('load-config')">
+        <button class="btn !h-8 !rounded-md !px-2 !text-xs" @click="emit('loadConfig')">
           加载所选
         </button>
-        <button class="btn !h-8 !rounded-md !bg-slate-700 !px-2 !text-xs hover:!bg-slate-800" @click="emit('save-config')">
+        <button class="btn !h-8 !rounded-md !bg-slate-700 !px-2 !text-xs hover:!bg-slate-800" @click="emit('saveConfig')">
           覆盖保存
         </button>
       </div>
@@ -95,10 +95,10 @@ const wrapperKeyModel = computed({
         type="text"
       >
       <div class="mt-2 grid grid-cols-2 gap-2">
-        <button class="btn !h-8 !rounded-md !bg-cyan-700 !px-2 !text-xs hover:!bg-cyan-800" @click="emit('create-config')">
+        <button class="btn !h-8 !rounded-md !bg-cyan-700 !px-2 !text-xs hover:!bg-cyan-800" @click="emit('createConfig')">
           新建保存
         </button>
-        <button class="btn !h-8 !rounded-md !bg-rose-700 !px-2 !text-xs hover:!bg-rose-800" @click="emit('delete-config')">
+        <button class="btn !h-8 !rounded-md !bg-rose-700 !px-2 !text-xs hover:!bg-rose-800" @click="emit('deleteConfig')">
           删除所选
         </button>
       </div>

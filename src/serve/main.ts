@@ -1,6 +1,6 @@
 import { onMessage, sendMessage } from 'webext-bridge/background'
 import type { Tabs } from 'webextension-polyfill'
-import { PageSchema } from '../schemas/pages.schema'
+import { PageSchema } from './schemas/pages.schema'
 import { registerControllers, registerRouterEventHandlers } from './register'
 
 function openDatabase(dbName: string) {

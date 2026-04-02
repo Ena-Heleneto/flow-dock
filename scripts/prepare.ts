@@ -9,7 +9,7 @@ import { extensionDistDir, isDev, log, port, r } from './utils'
  * Stub index.html to use Vite in development
  */
 async function stubIndexHtml() {
-  const views = ['database', 'import-pipeline', 'options', 'popup', 'sidepanel']
+  const views = ['database', 'dict-keeper', 'import-pipeline', 'options', 'popup', 'sidepanel']
 
   for (const view of views) {
     const viewDistDir = join(extensionDistDir, view)

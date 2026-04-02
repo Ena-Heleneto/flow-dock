@@ -1,12 +1,11 @@
 import { expect, isDevArtifact, name, test } from './fixtures'
 
 test('example test', async ({ page }, testInfo) => {
-  testInfo.skip(!isDevArtifact(), 'contentScript is in closed ShadowRoot mode')
+  testInfo.skip(!isDevArtifact(), 'contentScript uses a closed ShadowRoot outside dev artifacts')
 
   await page.goto('https://example.com')
 
-  await page.locator(`#${name} button`).click()
-  await expect(page.locator(`#${name} h1`)).toHaveText('Vitesse WebExt')
+  await expect(page.locator(`#${name} button`)).toBeVisible()
 })
 
 test('popup page', async ({ page, extensionId }) => {

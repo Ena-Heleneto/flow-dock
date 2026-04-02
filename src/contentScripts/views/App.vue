@@ -54,7 +54,7 @@ function setStatus(message: string, autoClear = false) {
  * @throws {Error} 当消息发送失败时捕获错误并记录
  */
 async function handleAnalyzePage() {
-  const analyzeResult = await sendMessage('pages/analyze', {}, 'background')
+  const analyzeResult = await sendMessage('pages/analyze', {})
   logger.success('analyze-page success', analyzeResult)
   return analyzeResult
 }
@@ -73,7 +73,7 @@ function isSaveSuccess(result: unknown) {
 
 async function requestSaveWithRetry() {
   try {
-    const result = await sendMessage('pages/save', {}, 'background')
+    const result = await sendMessage('pages/save', {})
     logger.success('save-page success', result)
     return result
   }
@@ -83,7 +83,7 @@ async function requestSaveWithRetry() {
       throw error
 
     await new Promise(resolve => setTimeout(resolve, 300))
-    const retryResult = await sendMessage('pages/save', {}, 'background')
+    const retryResult = await sendMessage('pages/save', {})
     logger.success('save-page success after retry', retryResult)
     return retryResult
   }
@@ -325,7 +325,7 @@ onBeforeUnmount(() => {
  */
 async function handleExistsPages() {
   try {
-    const result = await sendMessage('pages/exists', {}, 'background')
+    const result = await sendMessage('pages/exists', {})
     const data = result && typeof result === 'object' ? (result as { data?: unknown }).data : false
     isExists.value = Boolean(data)
   }
@@ -338,36 +338,41 @@ async function handleExistsPages() {
 
 <template>
   <div
-    ref="DragTargetRef" :style="dragStyle" fixed="~" z="100" flex="~" items="center" gap="2" font="sans"
-    select="none" rounded="full" p="x-2 y-1.5" border="~ violet-200/70" shadow="lg" bg="white/95"
+    ref="DragTargetRef"
+    class="fd-widget"
+    :style="dragStyle"
   >
-    <div flex="~ col" gap="0.5" p="l-1" min-w="28" max-w="52">
-      <div flex="~" items="center" gap="1.5" leading="1">
+    <div class="fd-status">
+      <div class="fd-status-row">
         <div
-          w="2" h="2" rounded="full"
-          :class="isExists ? 'bg-green-500' : 'bg-amber-500'"
+          class="fd-status-dot"
+          :class="isExists ? 'is-exists' : 'is-missing'"
         />
-        <div text="xs slate-700" whitespace="nowrap">
+        <div class="fd-status-text">
           {{ isExists ? '页面已存在' : '页面未保存' }}
         </div>
       </div>
 
-      <div v-if="statusMessage" text="xs slate-500" break-all leading="tight">
+      <div v-if="statusMessage" class="fd-status-message">
         {{ statusMessage }}
       </div>
     </div>
 
     <button
-      class="flex w-11 h-11 rounded-full shadow cursor-pointer border-none disabled:cursor-not-allowed disabled:opacity-60"
-      bg="violet-600 hover:violet-700"
+      class="fd-action-button"
       :disabled="isProcessing"
       :title="isProcessing ? '处理中...' : '保存并分析当前页面'"
       @click.stop="handleActionClick"
     >
-      <div v-if="isProcessing" i-svg-spinners:90-ring block="~" m="auto" text="white" />
-      <div v-else i-mdi:clipboard-text-clock-outline block="~" m="auto" text="white lg" />
-
-      <!-- mdi:record-rec -->
+      <span v-if="isProcessing" class="fd-spinner" />
+      <svg
+        v-else
+        class="fd-action-icon"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path d="M9 2c-.6 0-1 .4-1 1v1H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h5.1a6.5 6.5 0 0 1-.6-2H6V6h2v1h8V6h2v4.6a6.5 6.5 0 0 1 2 1.3V6a2 2 0 0 0-2-2h-2V3c0-.6-.4-1-1-1H9Zm1 2h4v1h-4V4Zm7 8a5 5 0 1 0 0 10a5 5 0 0 0 0-10Zm-.5 2h1.5v2.7l2.2 1.3l-.8 1.3l-2.9-1.8V14Z" />
+      </svg>
     </button>
   </div>
 </template>

@@ -30,7 +30,7 @@ export const sharedConfig: UserConfig = {
         { consola: [['default', 'consola']] },
       ],
       dts: r('src/auto-imports.d.ts'),
-      dirs: ['composables', 'schemas', 'utils', 'types', 'background/services'],
+      dirs: ['composables', 'serve/schemas', 'utils', 'types', 'serve/services'],
     }),
 
     // https://github.com/antfu/unplugin-vue-components
@@ -83,6 +83,7 @@ export default defineConfig(({ command }) => ({
       input: {
         options: r('src/database/index.html'),
         importPipeline: r('src/import-pipeline/index.html'),
+        dictKeeper: r('src/dict-keeper/index.html'),
         globalSettings: r('src/options/index.html'),
         popup: r('src/popup/index.html'),
         sidepanel: r('src/sidepanel/index.html'),

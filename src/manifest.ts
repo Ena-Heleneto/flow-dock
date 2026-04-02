@@ -22,8 +22,8 @@ export async function getManifest() {
       open_in_tab: true,
     },
     background: isFirefox
-      ? { scripts: ['dist/background/index.mjs'], type: 'module' }
-      : { service_worker: 'dist/background/index.mjs', type: 'module' },
+      ? { scripts: ['dist/serve/index.mjs'], type: 'module' }
+      : { service_worker: 'dist/serve/index.mjs', type: 'module' },
     // icons: { 16: 'assets/icon-512.png', 48: 'assets/icon-512.png', 128: 'assets/icon-512.png' },
     permissions: ['tabs', 'storage', 'sidePanel', 'scripting', 'downloads'],
     host_permissions: ['*://*/*', '<all_urls>'],
@@ -58,7 +58,7 @@ export async function getManifest() {
   if (isDev && false) {
     // for content script, as browsers will cache them for each reload,
     // we use a background script to always inject the latest version
-    // see src/background/contentScriptHMR.ts
+    // see src/serve/contentScriptHMR.ts
     delete manifest.content_scripts
     manifest.permissions?.push('webNavigation')
   }

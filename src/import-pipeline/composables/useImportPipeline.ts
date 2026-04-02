@@ -196,7 +196,7 @@ export function useImportPipeline() {
   }
 
   async function refreshSavedConfigList() {
-    const normalized = await sendMessage('list-import-pipeline-configs', {}, 'background')
+    const normalized = await sendMessage('list-import-pipeline-configs', {})
 
     savedConfigs.value = normalized
 
@@ -257,7 +257,7 @@ export function useImportPipeline() {
         return false
       }
 
-      const saved = await sendMessage('get-import-pipeline-config', { id: targetId }, 'background')
+      const saved = await sendMessage('get-import-pipeline-config', { id: targetId })
       if (!saved) {
         await refreshSavedConfigList()
         if (showLog)
@@ -286,7 +286,7 @@ export function useImportPipeline() {
 
     try {
       const snapshot = buildCurrentConfigSnapshot(selected.id, selected.name, selected.createdAt)
-      await sendMessage('save-import-pipeline-config', snapshot, 'background')
+      await sendMessage('save-import-pipeline-config', snapshot)
       await refreshSavedConfigList()
       appendLog(`已覆盖保存配置：${snapshot.name}`)
       return true
@@ -307,7 +307,7 @@ export function useImportPipeline() {
         ? crypto.randomUUID()
         : `${now}-${Math.random().toString(36).slice(2, 10)}`
       const snapshot = buildCurrentConfigSnapshot(id, name, now)
-      await sendMessage('save-import-pipeline-config', snapshot, 'background')
+      await sendMessage('save-import-pipeline-config', snapshot)
       await refreshSavedConfigList()
       selectedConfigId.value = id
       configNameInput.value = ''
@@ -328,7 +328,7 @@ export function useImportPipeline() {
     }
 
     try {
-      await sendMessage('delete-import-pipeline-config', { id: selected.id }, 'background')
+      await sendMessage('delete-import-pipeline-config', { id: selected.id })
       await refreshSavedConfigList()
       appendLog(`已删除配置：${selected.name}`)
       return true

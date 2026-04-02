@@ -1,6 +1,6 @@
 // import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
-import { IdbTransactionUtil } from '../utils/transaction.util'
-import type { IdbTransactionContext } from '../utils/transaction.util'
+import { IdbTransactionUtil } from '../../utils/transaction.util'
+import type { IdbTransactionContext } from '../../types/transaction.type'
 
 /**
  * 用于存储打包数据的存储区名称

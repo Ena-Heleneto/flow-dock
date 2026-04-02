@@ -42,6 +42,10 @@ async function openGlobalSettingsPage() {
 async function openImportPipelinePage() {
   await openExtensionPage('dist/import-pipeline/index.html')
 }
+
+async function openDictKeeperPage() {
+  await openExtensionPage('dist/dict-keeper/index.html')
+}
 </script>
 
 <template>
@@ -57,6 +61,9 @@ async function openImportPipelinePage() {
       </button>
       <button class="btn mt-2" @click="openImportPipelinePage">
         数据导入流水线
+      </button>
+      <button class="btn mt-2" @click="openDictKeeperPage">
+        数据字典管理器
       </button>
     </div>
   </main>
