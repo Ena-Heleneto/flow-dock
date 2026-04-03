@@ -1,14 +1,16 @@
 <script setup lang="ts">
 async function openExtensionPage(path: string) {
   const url = browser.runtime.getURL(path)
+  const chromeTabs = (globalThis as any).chrome?.tabs
 
   try {
     await browser.tabs.create({ url })
   }
   catch {
-    const chromeTabs = (globalThis as any).chrome?.tabs
     if (chromeTabs?.create)
       chromeTabs.create({ url })
+    else
+      await browser.tabs.create({ url })
   }
 }
 
@@ -27,11 +29,15 @@ async function openOptionsPage() {
   }
   catch {
     const chromeRuntime = (globalThis as any).chrome?.runtime
+    const chromeTabs = (globalThis as any).chrome?.tabs
+    const optionsUrl = browser.runtime.getURL('dist/database/index.html')
 
     if (chromeRuntime?.openOptionsPage)
       chromeRuntime.openOptionsPage()
+    else if (chromeTabs?.create)
+      chromeTabs.create({ url: optionsUrl })
     else
-      await openExtensionPage('dist/database/index.html')
+      await browser.tabs.create({ url: optionsUrl })
   }
 }
 

@@ -3,7 +3,12 @@ import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import fs from 'fs-extra'
 import chokidar from 'chokidar'
-import { extensionDistDir, isDev, log, port, r } from './utils'
+import { extensionDir, extensionDistDir, isDev, log, port, r } from './utils'
+
+function shouldStubIndexHtml() {
+  const normalizedExtensionDir = extensionDir.replace(/\\/g, '/')
+  return isDev && normalizedExtensionDir.startsWith('dist/dev/')
+}
 
 /**
  * Stub index.html to use Vite in development
@@ -29,7 +34,7 @@ function writeManifest() {
 
 writeManifest()
 
-if (isDev) {
+if (shouldStubIndexHtml()) {
   stubIndexHtml()
   chokidar.watch(r('src/**/*.html'))
     .on('change', () => {

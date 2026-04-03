@@ -1,4 +1,4 @@
-import { getImportPipelineConfigById } from '~/serve/services/import_pipeline_configs.service'
+import { getImportPipelineConfigById } from '~/server/services/import_pipeline_configs.service'
 import { defineEventHandler, readBody } from '~/utils/define-event-handler.util'
 
 interface ConfigIdPayload {

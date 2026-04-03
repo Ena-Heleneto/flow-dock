@@ -2,6 +2,7 @@ import { defineConfig, presetAttributify, presetIcons, presetUno, presetWebFonts
 import {
   createLocalFontProcessor,
 } from '@unocss/preset-web-fonts/local'
+import { presetScrollbar } from 'unocss-preset-scrollbar'
 
 export default defineConfig({
   shortcuts: [
@@ -14,7 +15,6 @@ export default defineConfig({
     presetAttributify(),
     presetWind4(),
     presetIcons({ scale: 1.2 }),
-    presetIcons(),
     presetWebFonts({
       fonts: {
         sans: { name: 'DM Sans', weights: ['400', '700'], italic: false },
@@ -24,7 +24,9 @@ export default defineConfig({
       processors: createLocalFontProcessor({
         fontServeBaseUrl: '/assets/fonts',
       }),
+
     }),
+    presetScrollbar(),
   ],
 
   transformers: [

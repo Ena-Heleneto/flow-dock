@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// import { KvConfigsService, isAbsoluteScreenshotCachePath } from '~/serve/services/kv_configs.services'
+// import { KvConfigsService, isAbsoluteScreenshotCachePath } from '~/server/services/kv_configs.services'
 
 // const form = reactive({
 //   workspaceName: '',

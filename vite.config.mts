@@ -30,7 +30,7 @@ export const sharedConfig: UserConfig = {
         { consola: [['default', 'consola']] },
       ],
       dts: r('src/auto-imports.d.ts'),
-      dirs: ['composables', 'serve/schemas', 'utils', 'types', 'serve/services'],
+      dirs: ['composables', 'server/schemas', 'utils', 'types', 'server/services'],
     }),
 
     // https://github.com/antfu/unplugin-vue-components
