@@ -1,4 +1,5 @@
 onlyBuiltDependencies:
+  - '@parcel/watcher'
   - dtrace-provider
   - esbuild
   - simple-git-hooks

@@ -2,7 +2,7 @@
 import DictKeeperHeader from './components/header.vue'
 import DictKeeperTab from './components/tab.vue'
 import DictKeeperDict from './components/dict.vue'
-import DictKeeperConsole from './components/console.vue'
+import DictKeeperConsole from './components/console/index.vue'
 
 const deleteCount = ref(0)
 
