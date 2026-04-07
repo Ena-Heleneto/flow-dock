@@ -1,3 +1,10 @@
+<script lang="ts" setup>
+const emits = defineEmits<{
+  setting: []
+  preview: []
+}>()
+</script>
+
 <template>
   <div w-full p="y-2 x-3" flex="~" items="center" gap="x-4" shadow="lg" bg="#f1f2f6">
     <div text="6" h="8" i-game-icons:cyber-eye />
@@ -30,9 +37,9 @@
       <span>201</span>
     </div>
 
-    <div text="4" h="6" i-game-icons:bolt-eye />
+    <div text="4" h="6" i-game-icons:bolt-eye cursor="pointer" @click="emits('preview')" />
 
-    <div text="4" h="6" i-game-icons:settings-knobs />
+    <div text="4" h="6" i-game-icons:settings-knobs cursor="pointer" @click="emits('setting')" />
 
     <div flex="~" items="center" gap="x-1" cursor="pointer">
       <div text="4" h="6" i-game-icons:moon-bats />

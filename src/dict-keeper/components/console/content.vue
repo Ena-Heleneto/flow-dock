@@ -10,7 +10,18 @@ const { currentLog } = _userLogger
 </script>
 
 <template>
-  <div flex="~ col" overflow="y-auto">
-    <div v-for="(item, index) in currentLog" :key="index" v-text="item" />
+  <div flex="~ col 1" overflow="y-auto" gap="y-2" scrollbar-none="~">
+    <div
+      v-for="({ level = '', message = '' }, index) in currentLog" :key="index" flex="~" p="x-20" items="center"
+      gap="x-2"
+    >
+      <span>
+        <span>[</span>
+        <span>{{ level }}</span>
+        <span>]</span>
+      </span>
+
+      <span>{{ message }}</span>
+    </div>
   </div>
 </template>

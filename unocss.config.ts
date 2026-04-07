@@ -21,10 +21,7 @@ export default defineConfig({
         serif: 'DM Serif Display',
         mono: 'DM Mono',
       },
-      processors: createLocalFontProcessor({
-        fontServeBaseUrl: '/assets/fonts',
-      }),
-
+      processors: createLocalFontProcessor({ fontServeBaseUrl: '/assets/fonts' }),
     }),
     presetScrollbar(),
   ],

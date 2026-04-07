@@ -2,6 +2,9 @@ onlyBuiltDependencies:
   - '@parcel/watcher'
   - dtrace-provider
   - esbuild
+  - onnxruntime-node
+  - protobufjs
+  - sharp
   - simple-git-hooks
   - spawn-sync
   - unrs-resolver
