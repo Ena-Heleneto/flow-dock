@@ -32,7 +32,6 @@
 //   }
 
 //   async savePage(message: SavePageMessage = {}) {
-//     logger.log('Saving page...', message?.data)
 //     try {
 //       const preparedInput = await this.pagesService.prepareSavePageInput(message?.data)
 //       const senderTabId = typeof message?.sender?.tabId === 'number' ? message.sender.tabId : undefined
@@ -68,9 +67,6 @@
 
 //         total = await countPages()
 
-//         const savePagePersisted = { id: page.id, url: page.url, address: page.address, duplicated, screenshotId: screenshot?.id, total }
-//         logger.success('save-page persisted', savePagePersisted)
-
 //         shouldCommit = true
 //       }
 //       catch (error) {
@@ -78,7 +74,6 @@
 //           transaction.transaction.abort()
 //         }
 //         catch (abortError) {
-//           logger.debug('save-page transaction already finished before abort', abortError)
 //         }
 //         throw error
 //       }
@@ -93,9 +88,7 @@
 //               : String(commitError).includes('InvalidStateError')
 
 //             if (isFinishedError)
-//               logger.debug('save-page transaction already finished before commit', commitError)
 //             else
-//               logger.warn('save-page transaction commit failed, continue with done promise', commitError)
 //           }
 //         }
 
@@ -114,7 +107,6 @@
 //       return { page, duplicated, screenshot, total }
 //     }
 //     catch (error) {
-//       logger.error('save-page failed in background', error)
 //       throw error
 //     }
 //   }

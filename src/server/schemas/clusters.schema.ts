@@ -1,4 +1,3 @@
-// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
 import { IdbTransactionUtil } from '../../utils/transaction.util'
 import type { IdbTransactionContext } from '../../types/transaction.type'
 
@@ -147,8 +146,6 @@ function filterActiveClusters(records: ClusterRecord[]) {
 }
 
 export function clustersSchema(options: ClustersSchemaOptions = {}) {
-  const schemaLogger = createLogger('schema:clusters')
-
   /**
    * 初始化 IndexedDB 数据库实例
    * @param {object} options - 配置选项
@@ -401,7 +398,7 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
     return updateCluster(id, { exportedAt: Date.now(), ts: Date.now() }, transaction)
   }
 
-  return wrapAsyncApiWithLogger(schemaLogger, {
+  return {
     createCluster,
     getCluster,
     listClusters,
@@ -416,7 +413,7 @@ export function clustersSchema(options: ClustersSchemaOptions = {}) {
     getBySignature,
     listByTsRange,
     markExported,
-  })
+  }
 }
 
 export const clusters = clustersStoreDefinition

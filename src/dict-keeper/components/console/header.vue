@@ -1,5 +1,14 @@
 <script lang="ts" setup>
-const type = ref(['ALL', 'INFO', 'WARN', 'ERROR', 'DEBUG'])
+import { USE_LOGGER_KEY } from '../../composables/useLogger'
+
+const _userLogger = inject(USE_LOGGER_KEY)
+
+if (!_userLogger)
+  throw new Error('USE_LOGGER is not provided')
+
+const { LEVEL_LIST } = _userLogger
+
+function handleSelectLevel() {}
 </script>
 
 <template>
@@ -32,7 +41,7 @@ const type = ref(['ALL', 'INFO', 'WARN', 'ERROR', 'DEBUG'])
 
       <div w="1px" h="stretch" bg="gray-300" />
 
-      <div v-for="(item, index) in type" :key="index" v-text="item" />
+      <div v-for="(item, index) in LEVEL_LIST" :key="index" @click="handleSelectLevel" v-text="item" />
     </div>
 
     <div flex="~" items="center" gap="x-2">

@@ -13,7 +13,6 @@ export class ScreenshotLinksService<TSchema extends GenericSchemaReader> {
    */
   async find(query: FindByCriteriaOptions) {
     const result = await this.schema.findByCriteria(this.transaction.getCurrent(), query)
-    logger.debug('Finding records in screenshot_links table', { indexName: query.indexName, query: query.query, total: result.length })
     return result
   }
 
@@ -25,7 +24,6 @@ export class ScreenshotLinksService<TSchema extends GenericSchemaReader> {
    */
   async saveScreenshotLinks(payload: Partial<SchemaRecordType<TSchema>>) {
     const id = await this.schema.create(this.transaction.getCurrent(), payload)
-    logger.debug(`Saved screenshot link in screenshot_links table ${id}`, { payload })
     return { id }
   }
 }

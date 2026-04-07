@@ -13,7 +13,6 @@ export class PagesService<TSchema extends GenericSchemaReader> {
   async exists<T = unknown>(query: FindByCriteriaOptions) {
     const result = await this.schema.findByCriteria<T>(this.transaction.getCurrent(), query)
     const exists = result.length > 0
-    logger.debug('Checking existence in pages table', { indexName: query.indexName, query: query.query, exists, total: result.length })
     return exists
   }
 
@@ -25,7 +24,6 @@ export class PagesService<TSchema extends GenericSchemaReader> {
    */
   async save<T = Partial<SchemaRecordType<typeof PageSchema>>>(data: T) {
     const id = await this.schema.create(this.transaction.getCurrent(), data)
-    logger.debug(`Saved record in pages table with id ${id}`, { data })
     return id
   }
 
@@ -38,7 +36,6 @@ export class PagesService<TSchema extends GenericSchemaReader> {
    */
   async find(query: FindByCriteriaOptions) {
     const result = await this.schema.findByCriteria(this.transaction.getCurrent(), query)
-    logger.debug('Finding records in pages table', { indexName: query.indexName, query: query.query, total: result.length })
     return result
   }
 }

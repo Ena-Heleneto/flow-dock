@@ -15,7 +15,6 @@ export class KvConfigsService<TSchema extends GenericSchemaReader> {
    */
   async readConfig() {
     const configs = await this.schema.findAll(this.transaction.getCurrent())
-    logger.debug('Read all configs from kv_configs table', { total: configs.length })
     return configs
   }
 }

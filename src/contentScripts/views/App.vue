@@ -46,17 +46,15 @@ function setStatus(message: string, autoClear = false) {
 
 /**
  * 处理保存页面的异步函数
- * 向后台发送保存页面的消息，并根据结果进行日志记录
+ * 向后台发送分析页面的消息，并返回分析结果
  *
  * @async
- * @function handleSavePage
+ * @function handleAnalyzePage
  * @returns {Promise<void>}
- * @throws {Error} 当消息发送失败时捕获错误并记录
+ * @throws {Error} 当消息发送失败时抛出错误
  */
 async function handleAnalyzePage() {
-  const analyzeResult = await sendMessage('pages/analyze', {})
-  logger.success('analyze-page success', analyzeResult)
-  return analyzeResult
+  return sendMessage('pages/analyze', {})
 }
 
 function getResponseCode(result: unknown): number {
@@ -73,9 +71,7 @@ function isSaveSuccess(result: unknown) {
 
 async function requestSaveWithRetry() {
   try {
-    const result = await sendMessage('pages/save', {})
-    logger.success('save-page success', result)
-    return result
+    return await sendMessage('pages/save', {})
   }
   catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -83,9 +79,7 @@ async function requestSaveWithRetry() {
       throw error
 
     await new Promise(resolve => setTimeout(resolve, 300))
-    const retryResult = await sendMessage('pages/save', {})
-    logger.success('save-page success after retry', retryResult)
-    return retryResult
+    return await sendMessage('pages/save', {})
   }
 }
 
@@ -112,9 +106,8 @@ async function handleSavePage() {
       setStatus('保存未成功', true)
     }
   }
-  catch (error: unknown) {
+  catch {
     setStatus('保存失败', true)
-    logger.error('save-page failed', error)
   }
   finally {
     isProcessing.value = false
@@ -321,7 +314,7 @@ onBeforeUnmount(() => {
  * @function handleExistsPages
  * @returns {Promise<void>}
  *
- * @throws {Error} 当发送消息失败时捕获错误并记录
+ * @throws {Error} 当发送消息失败时捕获错误
  */
 async function handleExistsPages() {
   try {
@@ -329,9 +322,8 @@ async function handleExistsPages() {
     const data = result && typeof result === 'object' ? (result as { data?: unknown }).data : false
     isExists.value = Boolean(data)
   }
-  catch (error: unknown) {
+  catch {
     isExists.value = false
-    logger.error('exists-pages failed', error)
   }
 }
 </script>

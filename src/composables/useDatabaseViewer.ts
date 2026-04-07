@@ -169,8 +169,7 @@ export function useDbViewer(dbName: MaybeRefOrGetter<string> = 'flow-dock-dev') 
     try {
       rowEditorText.value = JSON.stringify(row.value, null, 2)
     }
-    catch (error) {
-      logger.warn('Failed to stringify row value', error)
+    catch {
       rowEditorText.value = String(row.value)
     }
   }

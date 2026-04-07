@@ -3,8 +3,13 @@ import DictKeeperHeader from './components/header.vue'
 import DictKeeperTab from './components/tab.vue'
 import DictKeeperDict from './components/dict.vue'
 import DictKeeperConsole from './components/console/index.vue'
+import { useLogger } from './composables/useLogger'
+import { MOCK_LOG_LIST } from './mock/log.mock'
 
 const deleteCount = ref(0)
+
+const { insertManyLogs } = useLogger()
+insertManyLogs(MOCK_LOG_LIST)
 
 const item = {
   label: '测试',

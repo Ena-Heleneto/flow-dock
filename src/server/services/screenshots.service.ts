@@ -11,7 +11,6 @@ export class ScreenshotsService<TSchema extends GenericSchemaReader> {
    */
   async saveScreenshot(payload: Partial<SchemaRecordType<TSchema>>) {
     const id = await this.schema.create(this.transaction.getCurrent(), payload)
-    logger.debug(`Saved screenshot in screenshots table ${id}`, { payload })
     return id
   }
 }

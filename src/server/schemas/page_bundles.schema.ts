@@ -133,8 +133,6 @@ function filterActiveRelations(records: PageBundleRecord[]) {
 }
 
 export function pageBundlesSchema(options: PageBundlesSchemaOptions = {}) {
-  const schemaLogger = createLogger('schema:page_bundles')
-
   /**
    * 初始化 IndexedDB 实例
    * @param {object} options - 配置选项
@@ -382,7 +380,7 @@ export function pageBundlesSchema(options: PageBundlesSchemaOptions = {}) {
     })
   }
 
-  return wrapAsyncApiWithLogger(schemaLogger, {
+  return {
     createPageBundle,
     getPageBundle,
     getByPageAndBundle,
@@ -397,7 +395,7 @@ export function pageBundlesSchema(options: PageBundlesSchemaOptions = {}) {
     listByPageId,
     listByBundleId,
     listByRole,
-  })
+  }
 }
 
 export const page_bundles = pageBundlesStoreDefinition

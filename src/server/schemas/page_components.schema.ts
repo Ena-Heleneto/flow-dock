@@ -1,5 +1,3 @@
-// import { createLogger, wrapAsyncApiWithLogger } from '~/utils/logger.util'
-
 /**
  * 页面组件存储的名称常量
  * 用于标识和访问页面组件相关的数据存储
@@ -137,8 +135,6 @@ function filterActiveRelations(records: PageComponentRecord[]): PageComponentRec
 }
 
 export function pageComponentsSchema(options: PageComponentsSchemaOptions = {}) {
-  const schemaLogger = createLogger('schema:page_components')
-
   /**
    * 初始化IndexedDB实例
    * @description 创建一个IndexedDB数据库连接，用于存储页面组件数据
@@ -382,7 +378,7 @@ export function pageComponentsSchema(options: PageComponentsSchemaOptions = {}) 
     })
   }
 
-  return wrapAsyncApiWithLogger(schemaLogger, {
+  return {
     createPageComponent,
     getPageComponent,
     getByPageAndComponent,
@@ -397,7 +393,7 @@ export function pageComponentsSchema(options: PageComponentsSchemaOptions = {}) 
     listByPageId,
     listByComponentId,
     listByRole,
-  })
+  }
 }
 
 export const page_components = pageComponentsStoreDefinition

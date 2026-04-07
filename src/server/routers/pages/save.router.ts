@@ -132,7 +132,6 @@ export default defineEventHandler(async (event) => {
       const _exists = await pagesService.exists({ indexName: 'routeSig', query: pageRouteSig, count: 1 })
       if (_exists) {
         await transactionIdb.done()
-        logger.success('Page already exists, skipping save', { routeSig: pageRouteSig })
         return { code: 0, data: null, message: 'page already exists' }
       }
     }
@@ -168,9 +167,7 @@ export default defineEventHandler(async (event) => {
         screenshotBasePath,
       )
     }
-    catch (error: unknown) {
-      logger.warn('Failed to download screenshot, continue saving db records', error)
-    }
+    catch {}
 
     await transactionIdb.start()
 
@@ -190,7 +187,6 @@ export default defineEventHandler(async (event) => {
 
     await transactionIdb.done()
 
-    logger.success('Page document and screenshot saved', { id, routeSig: pageRouteSig, screenshotId, screenshotBlobMeta })
     return {
       code: 0,
       data: { id, page: pageToSave, screenshot: screenshotToSave, screenshotBlobMeta, captureBlobMeta: toBlobMeta(screenshotCapture.blob), downloadId },
@@ -198,7 +194,6 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (error: unknown) {
-    logger.error('Failed to save page data', error)
     transactionIdb.abort()
     return { code: -1, data: null, message: error instanceof Error ? error.message : 'failed to save page data' }
   }

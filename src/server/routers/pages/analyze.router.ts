@@ -429,9 +429,7 @@ export default defineEventHandler(async (_event: unknown) => {
         boxedScreenshotBasePath,
       )
     }
-    catch (error: unknown) {
-      logger.warn('Failed to download boxed screenshot, continue saving db records', error)
-    }
+    catch {}
 
     const boxedLocalPath = buildLocalPath(boxedScreenshotBasePath, boxedScreenshotId, boxedScreenshot.mime)
 
@@ -487,8 +485,7 @@ export default defineEventHandler(async (_event: unknown) => {
       message: 'success',
     }
   }
-  catch (error) {
-    logger.error('Failed to analyze page screenshot', error)
+  catch {
     transactionIdb.abort()
     return { code: -1, data: null, message: 'failed to analyze page screenshot' }
   }

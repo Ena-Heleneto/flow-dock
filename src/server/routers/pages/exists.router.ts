@@ -13,12 +13,10 @@ export default defineEventHandler(async (event: unknown) => {
     await transactionIdb.start()
     const result = await pagesService.exists({ indexName: 'routeSig', query: routeSig, count: 1 })
 
-    logger.success('Page exists check completed', result)
     await transactionIdb.done()
     return { code: 0, data: result, message: 'success' }
   }
-  catch (error) {
-    logger.error('Page exists check failed', error)
+  catch {
     transactionIdb.abort()
     return { code: -1, data: null, message: 'failed to check if page exists' }
   }
