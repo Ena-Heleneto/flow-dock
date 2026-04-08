@@ -12,10 +12,6 @@ dist
 dist-ssr
 extension/manifest.json
 node_modules
-src/auto-imports.d.ts
-src/components.d.ts
+apps/auto-imports.d.ts
+apps/components.d.ts
 .eslintcache
-public/assets/fonts
-pack/
-.secret
-.pnpm-store

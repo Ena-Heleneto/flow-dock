@@ -1,10 +1,13 @@
 {
   "recommendations": [
-    "vue.volar",
     "antfu.iconify",
     "antfu.unocss",
     "dbaeumer.vscode-eslint",
     "csstools.postcss",
-    "mermaidchart.vscode-mermaid-chart"
+    "mermaidchart.vscode-mermaid-chart",
+    "gruntfuggly.todo-tree",
+    "usernamehw.errorlens",
+    "vue.volar",
+    "hollowtree.vue-snippets"
   ]
 }

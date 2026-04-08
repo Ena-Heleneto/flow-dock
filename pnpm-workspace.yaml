@@ -1,11 +1,9 @@
-onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - dtrace-provider
-  - esbuild
-  - onnxruntime-node
-  - protobufjs
-  - sharp
-  - simple-git-hooks
-  - spawn-sync
-  - unrs-resolver
-  - vue-demi
+shellEmulator: true
+trustPolicy: no-downgrade
+
+allowBuilds:
+  dtrace-provider: true
+  esbuild: true
+  simple-git-hooks: true
+  spawn-sync: true
+  vue-demi: true
