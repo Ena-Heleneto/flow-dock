@@ -1,0 +1,55 @@
+flowchart TD
+    EntryAccess["预设接入入口"]
+    EntryBusiness["日常业务操作入口"]
+
+    subgraph UI["UI 层"]
+        UISelectPreset["选择现成预设"]
+        UIImportPreset["导入预设配置"]
+        UIPresetConfirm["确认预设配置"]
+        UIUseCase["发起查询 / CRUD / 批量导入"]
+        UIResultConfirm["确认低置信度结果"]
+        UIRender["展示结果 / 错误 / 日志"]
+    end
+
+    subgraph Domain["领域层"]
+        DomainPreset["加载已确认预设"]
+        DomainRules["规则引擎驱动固定主流程"]
+        DomainAssist["可选智能辅助：字段匹配 / 候选排序"]
+        DomainUseCase["执行业务用例"]
+        DomainModel["统一为 Dictionary / DictionaryItem 标准模型"]
+        DomainConfidence{"是否低置信度？"}
+        DomainCommit["提交稳定结果并触发刷新"]
+    end
+
+    subgraph Adapter["数据源适配层"]
+        AdapterCall["调用固定适配器接口"]
+        AdapterHide["屏蔽接口 / 响应 / 页面差异"]
+        AdapterId["解析 dictId"]
+        AdapterFallback["列表回查 / 详情兜底 / 探针策略"]
+        AdapterNormalize["字段与返回结构归一化"]
+        AdapterEffect["执行外部副作用动作"]
+        AdapterCompensate["清理 / 回滚 / 补偿"]
+    end
+
+    subgraph Infra["基础设施层"]
+        InfraStorage["本地存储预设 / 导入预设配置"]
+        InfraLog["日志与错误跟踪"]
+        InfraDebug["内部调试工作台"]
+    end
+
+    EntryAccess --> UISelectPreset
+    EntryAccess --> UIImportPreset
+    UISelectPreset --> InfraStorage --> DomainPreset
+    UIImportPreset --> UIPresetConfirm --> InfraStorage
+    DomainAssist -. 仅提供低风险建议，不接管主流程 .-> DomainRules
+    DomainPreset --> DomainRules
+
+    EntryBusiness --> UIUseCase --> DomainRules
+    DomainRules --> DomainUseCase --> AdapterCall
+    AdapterCall --> AdapterHide --> AdapterId --> AdapterFallback --> AdapterNormalize --> DomainModel
+    AdapterCall -. 涉及外部写操作 .-> AdapterEffect --> AdapterCompensate --> InfraLog
+    DomainModel --> DomainConfidence
+    DomainConfidence -- 否 --> DomainCommit --> UIRender
+    DomainConfidence -- 是 --> UIResultConfirm --> DomainCommit
+    InfraLog --> UIRender
+    InfraDebug -. 内部诊断辅助 .-> InfraLog
