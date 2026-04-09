@@ -1,6 +1,6 @@
 import { createApp } from 'vue'
 import { setupApp } from '~/shared/logic/common-setup'
-import App from './dick-keeper.vue'
+import App from './dict-keeper.vue'
 import '~/shared/styles'
 
 const app = createApp(App)

@@ -1,6 +1,0 @@
-{
-  "id": "dick-keeper",
-  "kind": "page",
-  "enabled": true,
-  "page": { "entry": "index.html", "outDir": "dick-keeper" }
-}

@@ -1,4 +1,5 @@
 import { presetAttributify, presetIcons, presetUno, transformerDirectives } from 'unocss'
+import { presetScrollbar } from 'unocss-preset-scrollbar'
 import { defineConfig } from 'unocss/vite'
 
 export default defineConfig({
@@ -6,6 +7,7 @@ export default defineConfig({
     presetUno(),
     presetAttributify(),
     presetIcons(),
+    presetScrollbar(),
   ],
   transformers: [
     transformerDirectives(),

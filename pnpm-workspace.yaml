@@ -1,5 +1,6 @@
 shellEmulator: true
 trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 10080
 
 allowBuilds:
   dtrace-provider: true
