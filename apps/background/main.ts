@@ -1,6 +1,6 @@
 import { consola } from 'consola'
 import browser from 'webextension-polyfill'
-import './router-dispatcher'
+import '@/router-dispatcher'
 
 interface ChromeSidePanelApi {
   open?: (options: { tabId?: number, windowId?: number }) => Promise<void> | void

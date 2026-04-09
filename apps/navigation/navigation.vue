@@ -50,7 +50,7 @@ async function openImportPipelinePage() {
 }
 
 async function openDictKeeperPage() {
-  await openExtensionPage('dist/dict-keeper/index.html')
+  await openExtensionPage('dict-keeper/index.html')
 }
 
 async function handleOpenDatabaseManagerPage() {

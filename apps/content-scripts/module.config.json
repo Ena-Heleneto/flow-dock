@@ -2,8 +2,5 @@
   "id": "content-scripts",
   "kind": "content",
   "enabled": true,
-  "content": {
-    "entry": "index.ts",
-    "outDir": "content-scripts"
-  }
+  "content": { "entry": "index.ts", "outDir": "content-scripts" }
 }

@@ -2,8 +2,5 @@
   "id": "database-manger",
   "kind": "page",
   "enabled": true,
-  "page": {
-    "entry": "index.html",
-    "outDir": "database-manger"
-  }
+  "page": { "entry": "index.html", "outDir": "database-manger" }
 }

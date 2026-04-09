@@ -1,5 +1,5 @@
-import type { RouterMiddleware } from 'playground/runtime/middleware'
-import type { RuntimePlugin } from 'playground/runtime/plugin'
+import type { RouterMiddleware } from '@/driver/define-middleware-handle.driver'
+import type { RuntimePlugin } from '@/driver/define-plugin-handle.driver'
 import type {
   AnyRouterHandle,
   RouterError,
@@ -12,9 +12,15 @@ import { buildRouterEvent, normalizeHeaders, normalizeMeta } from 'playground/ru
 import { runMiddlewareChain } from 'playground/runtime/middleware'
 import { onMessage } from 'webext-bridge/background'
 import browser from 'webextension-polyfill'
+import { isMiddlewareHandle } from '@/driver/define-middleware-handle.driver'
+import { isPluginHandle } from '@/driver/define-plugin-handle.driver'
 import { isRouterHandle } from '@/driver/define-router-handle.driver'
 
 interface RouterModuleExport {
+  default?: unknown
+}
+
+interface RuntimeModuleExport {
   default?: unknown
 }
 
@@ -31,18 +37,25 @@ interface TraceContext {
   traceId: string
 }
 
-const ROUTER_MODULE_GLOB = '../../server/router/**/*.router.ts'
-const PLUGIN_MODULE_GLOB = '../../server/plugin/**/*.plugin.ts'
+const ROUTER_MODULE_GLOB = './router/**/*.router.ts'
+const MIDDLEWARE_MODULE_GLOB = './middleware/**/*.middleware.ts'
+const PLUGIN_MODULE_GLOB = './plugin/**/*.plugin.ts'
 const QUERY_AND_HASH_SUFFIX_RE = /[#?].*$/
 const WINDOWS_PATH_SEPARATOR_RE = /\\+/g
 const TRAILING_SLASH_RE = /\/+$/
 const ROUTER_FILE_SUFFIX_RE = /\.router\.ts$/
+const ROUTER_PATH_PREFIXES = [
+  '/server/router/',
+  './router/',
+  '@/router/',
+] as const
 
 const routeModules = import.meta.glob(ROUTER_MODULE_GLOB, { eager: true }) as Record<string, RouterModuleExport>
-const pluginModules = import.meta.glob(PLUGIN_MODULE_GLOB, { eager: true }) as Record<string, { default?: unknown }>
+const middlewareModules = import.meta.glob(MIDDLEWARE_MODULE_GLOB, { eager: true }) as Record<string, RuntimeModuleExport>
+const pluginModules = import.meta.glob(PLUGIN_MODULE_GLOB, { eager: true }) as Record<string, RuntimeModuleExport>
 const routeTable = buildRouteTable(routeModules)
+const runtimeMiddlewares = loadRuntimeMiddlewares(middlewareModules)
 const runtimePlugins = loadRuntimePlugins(pluginModules)
-const runtimeMiddlewares: RouterMiddleware[] = []
 
 onMessage('router-request', async (message) => {
   const payload = normalizeRequestPayload(message.data)
@@ -190,21 +203,29 @@ function createRouteKey(method: string, path: string) {
 
 function extractRoutePathFromModule(modulePath: string) {
   const normalizedPath = modulePath.replace(WINDOWS_PATH_SEPARATOR_RE, '/')
-  const marker = '/server/router/'
-  const markerIndex = normalizedPath.lastIndexOf(marker)
-  const sourcePath = markerIndex >= 0
-    ? normalizedPath.slice(markerIndex + marker.length)
-    : normalizedPath
+  const sourcePath = resolveRouteSourcePath(normalizedPath)
 
   const noSuffix = sourcePath.replace(ROUTER_FILE_SUFFIX_RE, '')
   const segments = noSuffix
     .split('/')
     .filter(Boolean)
+    .filter(segment => segment !== '.')
+    .filter(segment => segment !== 'router')
     .filter(segment => segment !== 'index')
 
   return segments.length > 0
     ? `/${segments.join('/')}`
     : '/'
+}
+
+function resolveRouteSourcePath(modulePath: string) {
+  for (const prefix of ROUTER_PATH_PREFIXES) {
+    const prefixIndex = modulePath.lastIndexOf(prefix)
+    if (prefixIndex >= 0)
+      return modulePath.slice(prefixIndex + prefix.length)
+  }
+
+  return modulePath
 }
 
 function resolveTrace(messageId: string, incomingTraceId: string | undefined): TraceContext {
@@ -259,38 +280,53 @@ function buildFailureResponse(error: RouterError, trace: TraceContext): RouterFa
   }
 }
 
-function loadRuntimePlugins(modules: Record<string, { default?: unknown }>) {
+function loadRuntimePlugins(modules: Record<string, RuntimeModuleExport>) {
   const plugins: RuntimePlugin[] = []
+  const moduleEntries = Object.entries(modules)
+    .sort(([leftModulePath], [rightModulePath]) => leftModulePath.localeCompare(rightModulePath))
 
-  for (const [modulePath, moduleExport] of Object.entries(modules)) {
-    if (!moduleExport.default)
+  for (const [modulePath, moduleExport] of moduleEntries) {
+    const runtimePlugin = moduleExport.default
+    if (runtimePlugin === undefined)
       continue
 
-    if (!isRuntimePlugin(moduleExport.default)) {
+    if (!isPluginHandle(runtimePlugin)) {
       consola.warn(`[router] ignored invalid plugin module: ${modulePath}`)
       continue
     }
 
-    plugins.push(moduleExport.default)
+    plugins.push(runtimePlugin)
   }
 
-  if (plugins.length > 0) {
-    const pluginNames = plugins.map(plugin => plugin.name ?? 'anonymous-plugin')
-    consola.log(`[router] loaded ${plugins.length} plugin(s): ${pluginNames.join(', ')}`)
-  }
+  const pluginNames = plugins.map(plugin => plugin.name ?? 'anonymous-plugin')
+  consola.log(`[router] loaded ${plugins.length} plugin(s): ${pluginNames.join(', ') || '(none)'}`)
 
   return plugins
 }
 
-function isRuntimePlugin(input: unknown): input is RuntimePlugin {
-  if (!input || typeof input !== 'object')
-    return false
+function loadRuntimeMiddlewares(modules: Record<string, RuntimeModuleExport>) {
+  const middlewares: RouterMiddleware[] = []
+  const loadedModulePaths: string[] = []
+  const moduleEntries = Object.entries(modules)
+    .sort(([leftModulePath], [rightModulePath]) => leftModulePath.localeCompare(rightModulePath))
 
-  const plugin = input as RuntimePlugin
-  if (!plugin.hooks)
-    return true
+  for (const [modulePath, moduleExport] of moduleEntries) {
+    const runtimeMiddleware = moduleExport.default
+    if (runtimeMiddleware === undefined)
+      continue
 
-  return typeof plugin.hooks === 'object'
+    if (!isMiddlewareHandle(runtimeMiddleware)) {
+      consola.warn(`[router] ignored invalid middleware module: ${modulePath}`)
+      continue
+    }
+
+    middlewares.push(runtimeMiddleware)
+    loadedModulePaths.push(modulePath)
+  }
+
+  consola.log(`[router] loaded ${middlewares.length} middleware(s): ${loadedModulePaths.join(', ') || '(none)'}`)
+
+  return middlewares
 }
 
 async function runRequestLifecycleHook(

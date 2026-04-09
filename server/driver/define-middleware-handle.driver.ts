@@ -1,1 +1,18 @@
-export { defineMiddleware as defineMiddlewareHandle } from 'playground/runtime/middleware'
+import type { RouterMiddleware, RouterNext } from 'playground/runtime/middleware'
+import {
+  defineMiddleware,
+
+} from 'playground/runtime/middleware'
+
+export type {
+  RouterMiddleware,
+  RouterNext,
+}
+
+export function defineMiddlewareHandle(middleware: RouterMiddleware): RouterMiddleware {
+  return defineMiddleware(middleware)
+}
+
+export function isMiddlewareHandle(input: unknown): input is RouterMiddleware {
+  return typeof input === 'function'
+}
