@@ -1,0 +1,9 @@
+{
+  "id": "import-pipeline",
+  "kind": "page",
+  "enabled": true,
+  "page": {
+    "entry": "index.html",
+    "outDir": "import-pipeline"
+  }
+}

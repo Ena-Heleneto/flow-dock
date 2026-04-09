@@ -46,5 +46,17 @@
   // It's better to put under project setting `.vscode/settings.json`
   // to avoid conflicts with working with different eslint configs
   // that does not support all formats.
-  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact", "vue", "html", "markdown", "json", "jsonc", "yaml"]
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact",
+    "vue",
+    "html",
+    "markdown",
+    "json",
+    "jsonc",
+    "yaml"
+  ],
+  "editor.tabSize": 2
 }

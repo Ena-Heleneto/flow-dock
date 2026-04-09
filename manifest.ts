@@ -1,40 +1,112 @@
 import type { Manifest } from 'webextension-polyfill'
 import type PkgType from './package.json'
+import { basename, resolve } from 'node:path'
+import process from 'node:process'
 import fs from 'fs-extra'
-import { isDev, isFirefox, port, r } from './scripts/context'
+import { discoverModules } from './scripts/module-registry'
+
+const port = Number(process.env.PORT || '') || 3303
+const r = (...args: string[]) => resolve(__dirname, ...args)
+
+interface SidePanelPageMeta {
+  panelPath: string
+  title?: string
+}
+
+function isDev() {
+  return process.env.NODE_ENV !== 'production'
+}
+
+function isFirefox() {
+  return process.env.EXTENSION === 'firefox'
+}
+
+function resolveSidePanelPage(): SidePanelPageMeta {
+  const pageModules = discoverModules({ appsRoot: r('apps') })
+    .filter(item => item.kind === 'page')
+
+  if (pageModules.length) {
+    const selected = pageModules.find(item => item.manifest?.sidePanelDefault) ?? pageModules[0]
+
+    return {
+      panelPath: `${selected.outDir}/${basename(selected.entry)}`,
+      title: selected.manifest?.sidebarTitle,
+    }
+  }
+
+  throw new Error('[manifest] unable to resolve side panel page from apps/*/module.config.json')
+}
 
 export async function getManifest() {
   const pkg = await fs.readJSON(r('package.json')) as typeof PkgType
+  const dev = isDev()
+  const firefox = isFirefox()
+  const geckoId = process.env.FIREFOX_GECKO_ID
+  const extensionTitle = pkg.displayName || pkg.name
+  const sidePanelPage = resolveSidePanelPage()
 
   // update this file to update this manifest.json
   // can also be conditional based on your need
   const manifest: Manifest.WebExtensionManifest = {
     manifest_version: 3,
-    name: pkg.displayName || pkg.name,
+    name: extensionTitle,
     version: pkg.version,
     description: pkg.description,
     action: {
       // default_icon: 'assets/icon-512.png',
+      default_title: extensionTitle,
     },
-    background: isFirefox
-      ? { scripts: ['dist/server/index.mjs'], type: 'module' }
-      : { service_worker: 'dist/server/index.mjs' },
+    background: firefox
+      ? { scripts: ['background/index.mjs'], type: 'module' }
+      : { service_worker: 'background/index.mjs' },
     icons: { },
-    permissions: ['tabs', 'storage', 'activeTab'],
+    permissions: firefox
+      ? ['tabs', 'storage', 'activeTab']
+      : ['tabs', 'storage', 'activeTab', 'sidePanel'] as Manifest.Permission[],
     host_permissions: ['*://*/*'],
     content_scripts: [
       {
         matches: ['<all_urls>'],
-        js: ['dist/contentScripts/index.global.js'],
+        js: ['content-scripts/index.global.js'],
       },
     ],
     content_security_policy: {
-      extension_pages: isDev
+      extension_pages: dev
         // this is required on dev for Vite script to load
         ? `script-src \'self\' http://localhost:${port}; object-src \'self\'`
         : 'script-src \'self\'; object-src \'self\'',
     },
   }
 
+  if (firefox) {
+    manifest.sidebar_action = {
+      default_title: sidePanelPage.title ?? extensionTitle,
+      default_panel: sidePanelPage.panelPath,
+    }
+  }
+  else {
+    (manifest as Manifest.WebExtensionManifest & {
+      side_panel?: { default_path: string }
+    }).side_panel = {
+      default_path: sidePanelPage.panelPath,
+    }
+  }
+
+  if (firefox && geckoId) {
+    manifest.browser_specific_settings = {
+      gecko: { id: geckoId },
+    }
+  }
+
   return manifest
 }
+
+async function writeManifestFromEnv() {
+  const outFile = process.env.MANIFEST_OUT
+  if (!outFile)
+    return
+
+  await fs.outputJSON(outFile, await getManifest(), { spaces: 2 })
+}
+
+void writeManifestFromEnv()

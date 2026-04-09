@@ -1,3 +1,7 @@
+import type {
+  RouterRequestPayload,
+  RouterResponse,
+} from 'playground/runtime/types'
 import type { ProtocolWithReturn } from 'webext-bridge'
 
 declare module 'webext-bridge' {
@@ -6,5 +10,6 @@ declare module 'webext-bridge' {
     // see https://github.com/antfu/webext-bridge#type-safe-protocols
     'tab-prev': { title: string | undefined }
     'get-current-tab': ProtocolWithReturn<{ tabId: number }, { title?: string }>
+    'router-request': ProtocolWithReturn<RouterRequestPayload, RouterResponse>
   }
 }

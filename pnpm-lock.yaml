@@ -50,6 +50,9 @@ importers:
       chokidar:
         specifier: ^3.6.0
         version: 3.6.0
+      consola:
+        specifier: ^3.4.2
+        version: 3.4.2
       cross-env:
         specifier: ^7.0.3
         version: 7.0.3

@@ -1,7 +1,8 @@
 /// <reference types="vitest" />
 
 import type { UserConfig } from 'vite'
-import { dirname, relative } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
+import process from 'node:process'
 import Vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
 import AutoImport from 'unplugin-auto-import/vite'
@@ -10,74 +11,164 @@ import Icons from 'unplugin-icons/vite'
 import Components from 'unplugin-vue-components/vite'
 import { defineConfig } from 'vite'
 import packageJson from './package.json'
-import { buildTarget, isDev, port, r } from './scripts/context'
+import { discoverModules } from './scripts/module-registry'
 
-type BundleTarget = 'server' | 'content' | 'app'
+const port = Number(process.env.PORT || '') || 3303
+const isDev = process.env.NODE_ENV !== 'production'
+const buildTarget = process.env.BUILD_TARGET
+const pageName = process.env.PAGE_NAME
+const browserTarget = process.env.EXTENSION === 'firefox' ? 'firefox' : 'chrome'
+const outputMode = isDev ? 'dev' : 'build'
+const watchEnabled = process.env.WATCH === 'true'
+const r = (...args: string[]) => resolve(__dirname, ...args)
+
+type BundleTarget = 'background' | 'content' | 'page' | 'app'
+const discoveredModules = discoverModules({ appsRoot: r('apps') })
 
 function resolveBundleTarget(): BundleTarget {
-  if (buildTarget === 'server' || buildTarget === 'content')
-    return buildTarget
+  if (buildTarget === 'background' || buildTarget === 'server')
+    return 'background'
+
+  if (buildTarget === 'content')
+    return 'content'
+
+  if (buildTarget === 'page' || buildTarget === 'navigation')
+    return 'page'
 
   return 'app'
 }
 
+function resolvePageName() {
+  if (pageName)
+    return pageName
+
+  if (buildTarget === 'navigation')
+    return 'navigation'
+
+  return 'navigation'
+}
+
+function resolveModuleByKind(kind: 'background' | 'content') {
+  const module = discoveredModules.find(item => item.kind === kind)
+  if (!module)
+    throw new Error(`[vite] missing module config for kind: ${kind}`)
+
+  return module
+}
+
+function resolvePageModule(name: string) {
+  const module = discoveredModules.find(item => item.kind === 'page' && (item.dirName === name || item.id === name))
+  if (!module)
+    throw new Error(`[vite] missing page module: ${name}`)
+
+  return module
+}
+
+function resolveBackgroundBuildMeta() {
+  const module = resolveModuleByKind('background')
+
+  return {
+    entryFile: r('apps', module.dirName, module.entry),
+    outDir: module.outDir,
+  }
+}
+
+function resolveContentBuildMeta() {
+  const module = resolveModuleByKind('content')
+
+  return {
+    entryFile: r('apps', module.dirName, module.entry),
+    outDir: module.outDir,
+  }
+}
+
+function resolvePageBuildMeta(name: string) {
+  const module = resolvePageModule(name)
+  const rootDir = r('apps', module.dirName)
+
+  return {
+    rootDir,
+    entryFile: r('apps', module.dirName, module.entry),
+    outDir: module.outDir,
+  }
+}
+
+function resolveOutDir(...parts: string[]) {
+  return resolve(__dirname, 'dist', outputMode, browserTarget, ...parts)
+}
+
 function resolveBuildConfig(target: BundleTarget): UserConfig['build'] {
-  if (target === 'server') {
+  if (target === 'background') {
+    const { entryFile, outDir } = resolveBackgroundBuildMeta()
+
     return {
-      watch: isDev ? {} : undefined,
-      outDir: r('extension/dist/server'),
+      watch: watchEnabled ? {} : undefined,
+      outDir: resolveOutDir(outDir),
       cssCodeSplit: false,
       emptyOutDir: false,
       sourcemap: isDev ? 'inline' : false,
       lib: {
-        entry: r('server/main.ts'),
+        entry: entryFile,
         name: packageJson.name,
         formats: ['iife'],
       },
       rollupOptions: {
-        output: {
-          entryFileNames: 'index.mjs',
-          extend: true,
-        },
+        output: { entryFileNames: 'index.mjs', extend: true },
       },
     }
   }
 
   if (target === 'content') {
+    const { entryFile, outDir } = resolveContentBuildMeta()
+
     return {
-      watch: isDev ? {} : undefined,
-      outDir: r('extension/dist/contentScripts'),
+      watch: watchEnabled ? {} : undefined,
+      outDir: resolveOutDir(outDir),
       cssCodeSplit: false,
       emptyOutDir: false,
       sourcemap: isDev ? 'inline' : false,
       lib: {
-        entry: r('apps/contentScripts/index.ts'),
+        entry: entryFile,
         name: packageJson.name,
         formats: ['iife'],
       },
       rollupOptions: {
-        output: {
-          entryFileNames: 'index.global.js',
-          extend: true,
+        output: { entryFileNames: 'index.global.js', extend: true },
+      },
+    }
+  }
+
+  if (target === 'page') {
+    const resolvedPageName = resolvePageName()
+    const { entryFile, outDir } = resolvePageBuildMeta(resolvedPageName)
+
+    return {
+      watch: watchEnabled ? {} : undefined,
+      outDir: resolveOutDir(outDir),
+      emptyOutDir: false,
+      sourcemap: isDev ? 'inline' : false,
+      rollupOptions: {
+        input: {
+          index: entryFile,
         },
       },
     }
   }
 
   return {
-    watch: isDev ? {} : undefined,
-    outDir: r('extension/dist'),
+    watch: watchEnabled ? {} : undefined,
+    outDir: resolveOutDir(),
     emptyOutDir: false,
     sourcemap: isDev ? 'inline' : false,
   }
 }
 
 export const sharedConfig: UserConfig = {
-  root: r('.'),
   resolve: {
     alias: {
-      '~/': `${r('apps')}/`,
-      '@server/': `${r('server')}/`,
+      '~/': `${resolve(__dirname, 'apps')}/`,
+      '@/': `${resolve(__dirname, 'server')}/`,
+      'playground/': `${resolve(__dirname, 'playground')}/`,
     },
   },
   define: {
@@ -93,14 +184,14 @@ export const sharedConfig: UserConfig = {
         'vue',
         { 'webextension-polyfill': [['=', 'browser']] },
       ],
-      dts: r('apps/auto-imports.d.ts'),
+      dts: resolve(__dirname, 'apps/auto-imports.d.ts'),
     }),
 
     // https://github.com/antfu/unplugin-vue-components
     Components({
-      dirs: [r('apps/shared/components')],
+      dirs: [resolve(__dirname, 'apps/shared/components')],
       // generate `components.d.ts` for ts support with Volar
-      dts: r('apps/components.d.ts'),
+      dts: resolve(__dirname, 'apps/components.d.ts'),
       resolvers: [
         // auto import icons
         IconsResolver({ prefix: '' }),
@@ -131,10 +222,13 @@ export const sharedConfig: UserConfig = {
 
 export default defineConfig(({ command }) => {
   const target = resolveBundleTarget()
+  const resolvedPageName = resolvePageName()
+  const pageMeta = target === 'page' ? resolvePageBuildMeta(resolvedPageName) : undefined
 
   return {
     ...sharedConfig,
-    base: command === 'serve' ? `http://localhost:${port}/` : '/dist/',
+    root: target === 'page' ? pageMeta?.rootDir : __dirname,
+    base: command === 'serve' ? `http://localhost:${port}/` : './',
     server: {
       port,
       hmr: { host: 'localhost' },

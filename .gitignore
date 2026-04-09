@@ -8,10 +8,10 @@
 *.pem
 *.xpi
 *.zip
-dist
+env
 dist-ssr
-extension/manifest.json
 node_modules
 apps/auto-imports.d.ts
 apps/components.d.ts
 .eslintcache
+dist
