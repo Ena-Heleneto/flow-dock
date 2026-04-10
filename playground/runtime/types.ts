@@ -34,6 +34,24 @@ export interface RouterSender {
   url?: string
 }
 
+export type RouterTransactionMode = 'readonly' | 'readwrite'
+
+export type RouterTransactionStatus = 'active' | 'committed' | 'rolled-back'
+
+export interface RouterRequestTransaction {
+  readonly id: string
+  readonly mode: RouterTransactionMode
+  readonly done: Promise<void>
+  readonly commit: () => Promise<void>
+  readonly rollback: () => Promise<void>
+  readonly isActive: () => boolean
+  readonly getStatus: () => RouterTransactionStatus
+  readonly useStore: <TResult>(
+    storeName: string,
+    handler: (store: IDBObjectStore) => Promise<TResult> | TResult,
+  ) => Promise<TResult>
+}
+
 export interface RouterContext {
   sender: RouterSender
   module: string
@@ -41,6 +59,7 @@ export interface RouterContext {
   requestId: string
   traceId: string
   timestamp: number
+  transaction?: RouterRequestTransaction
 }
 
 export interface RouterEvent<

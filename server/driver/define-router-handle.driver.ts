@@ -38,10 +38,7 @@ export function defineRouterHandle<
 ): RouterHandle<TBody, TResult, TMeta> {
   const normalizedMethod = (options.method ?? 'POST').toUpperCase() as RouterMethod
 
-  return {
-    method: normalizedMethod,
-    handle: handler,
-  }
+  return { method: normalizedMethod, handle: handler }
 }
 
 export function isRouterHandle(input: unknown): input is AnyRouterHandle {

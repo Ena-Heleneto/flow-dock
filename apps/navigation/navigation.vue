@@ -54,7 +54,7 @@ async function openDictKeeperPage() {
 }
 
 async function handleOpenDatabaseManagerPage() {
-  await openExtensionPage('dist/database-manager/index.html')
+  await openExtensionPage('database-manager/index.html')
 }
 </script>
 

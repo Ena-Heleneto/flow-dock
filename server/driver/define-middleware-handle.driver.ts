@@ -1,13 +1,7 @@
 import type { RouterMiddleware, RouterNext } from 'playground/runtime/middleware'
-import {
-  defineMiddleware,
+import { defineMiddleware } from 'playground/runtime/middleware'
 
-} from 'playground/runtime/middleware'
-
-export type {
-  RouterMiddleware,
-  RouterNext,
-}
+export type { RouterMiddleware, RouterNext }
 
 export function defineMiddlewareHandle(middleware: RouterMiddleware): RouterMiddleware {
   return defineMiddleware(middleware)

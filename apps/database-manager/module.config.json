@@ -1,0 +1,6 @@
+{
+  "id": "database-manager",
+  "kind": "page",
+  "enabled": true,
+  "page": { "entry": "index.html", "outDir": "database-manager" }
+}

@@ -37,9 +37,6 @@ interface TraceContext {
   traceId: string
 }
 
-const ROUTER_MODULE_GLOB = './router/**/*.router.ts'
-const MIDDLEWARE_MODULE_GLOB = './middleware/**/*.middleware.ts'
-const PLUGIN_MODULE_GLOB = './plugin/**/*.plugin.ts'
 const QUERY_AND_HASH_SUFFIX_RE = /[#?].*$/
 const WINDOWS_PATH_SEPARATOR_RE = /\\+/g
 const TRAILING_SLASH_RE = /\/+$/
@@ -50,9 +47,11 @@ const ROUTER_PATH_PREFIXES = [
   '@/router/',
 ] as const
 
-const routeModules = import.meta.glob(ROUTER_MODULE_GLOB, { eager: true }) as Record<string, RouterModuleExport>
-const middlewareModules = import.meta.glob(MIDDLEWARE_MODULE_GLOB, { eager: true }) as Record<string, RuntimeModuleExport>
-const pluginModules = import.meta.glob(PLUGIN_MODULE_GLOB, { eager: true }) as Record<string, RuntimeModuleExport>
+// NOTE:
+// Keep glob patterns as string literals so Vite can statically analyze and include matched modules.
+const routeModules = import.meta.glob('./router/**/*.router.ts', { eager: true }) as Record<string, RouterModuleExport>
+const middlewareModules = import.meta.glob('./middleware/**/*.middleware.ts', { eager: true }) as Record<string, RuntimeModuleExport>
+const pluginModules = import.meta.glob('./plugin/**/*.plugin.ts', { eager: true }) as Record<string, RuntimeModuleExport>
 const routeTable = buildRouteTable(routeModules)
 const runtimeMiddlewares = loadRuntimeMiddlewares(middlewareModules)
 const runtimePlugins = loadRuntimePlugins(pluginModules)
@@ -153,6 +152,9 @@ function buildRouteTable(routeModuleMap: Record<string, RouterModuleExport>) {
   }
 
   const routeKeys = [...table.keys()]
+  if (routeKeys.length === 0)
+    consola.warn('[router] no routes loaded, check import.meta.glob patterns and build target output')
+
   consola.log(`[router] loaded ${routeKeys.length} route(s): ${routeKeys.join(', ') || '(none)'}`)
 
   return table

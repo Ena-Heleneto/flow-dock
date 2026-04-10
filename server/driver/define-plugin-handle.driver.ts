@@ -1,8 +1,5 @@
 import type { RuntimePlugin, RuntimePluginHooks } from 'playground/runtime/plugin'
-import {
-  definePlugin,
-
-} from 'playground/runtime/plugin'
+import { definePlugin } from 'playground/runtime/plugin'
 
 const PLUGIN_HOOK_KEYS: ReadonlyArray<keyof RuntimePluginHooks> = [
   'onContextCreated',
@@ -11,10 +8,7 @@ const PLUGIN_HOOK_KEYS: ReadonlyArray<keyof RuntimePluginHooks> = [
   'onError',
 ]
 
-export type {
-  RuntimePlugin,
-  RuntimePluginHooks,
-}
+export type { RuntimePlugin, RuntimePluginHooks }
 
 export function definePluginHandle(plugin: RuntimePlugin): RuntimePlugin {
   return definePlugin(plugin)

@@ -46,6 +46,7 @@ export function buildRouterEvent(input: BuildRouterEventInput): RouterEvent {
       requestId: input.trace.requestId,
       traceId: input.trace.traceId,
       timestamp: input.message.timestamp,
+      transaction: undefined,
     },
     meta: normalizedMeta,
     rawMessage: input.message,
