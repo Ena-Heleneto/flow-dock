@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import DictKeeperConsole from './components/console/index.vue'
+import DictKeeperConsole from '~/shared/components/console/index.vue'
+import { useLogger } from '~/shared/composables/useLogger'
 import DictKeeperDict from './components/dict/index.vue'
 import DictKeeperHeader from './components/header/index.vue'
 import DictKeeperToolbar from './components/toolbar/index.vue'
-import { useLogger } from './composables/useLogger'
 import { MOCK_LOG_LIST } from './mock/log.mock'
 import DictKeeperPreview from './preview.vue'
 import DictKeeperSetting from './setting.vue'

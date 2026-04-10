@@ -27,8 +27,14 @@ bootstrap_browser() {
 	write_manifest 'development' "$browser"
 }
 
-bootstrap_browser 'chrome'
-bootstrap_browser 'firefox'
+if [[ "${DEV_BOOTSTRAP:-false}" == 'true' ]]; then
+	bootstrap_browser 'chrome'
+	bootstrap_browser 'firefox'
+else
+	log 'skipping bootstrap bundles (DEV_BOOTSTRAP=false); watchers will run initial build'
+	write_manifest 'development' 'chrome'
+	write_manifest 'development' 'firefox'
+fi
 
 declare -a pids=()
 

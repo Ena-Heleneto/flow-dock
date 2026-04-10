@@ -97,6 +97,28 @@ function resolveOutDir(...parts: string[]) {
   return resolve(__dirname, 'dist', outputMode, browserTarget, ...parts)
 }
 
+function resolvePageManualChunk(id: string) {
+  if (!id.includes('/node_modules/'))
+    return undefined
+
+  if (id.includes('/node_modules/xlsx/'))
+    return 'vendor-xlsx'
+
+  if (id.includes('/node_modules/webext-bridge/'))
+    return 'vendor-webext-bridge'
+
+  if (id.includes('/node_modules/webextension-polyfill/'))
+    return 'vendor-webextension-polyfill'
+
+  if (id.includes('/node_modules/vue/') || id.includes('/node_modules/@vue/'))
+    return 'vendor-vue'
+
+  if (id.includes('/node_modules/@vueuse/'))
+    return 'vendor-vueuse'
+
+  return 'vendor-common'
+}
+
 function resolveBuildConfig(target: BundleTarget): UserConfig['build'] {
   if (target === 'background') {
     const { entryFile, outDir } = resolveBackgroundBuildMeta()
@@ -106,7 +128,7 @@ function resolveBuildConfig(target: BundleTarget): UserConfig['build'] {
       outDir: resolveOutDir(outDir),
       cssCodeSplit: false,
       emptyOutDir: false,
-      sourcemap: isDev ? 'inline' : false,
+      sourcemap: isDev,
       lib: {
         entry: entryFile,
         name: packageJson.name,
@@ -126,7 +148,7 @@ function resolveBuildConfig(target: BundleTarget): UserConfig['build'] {
       outDir: resolveOutDir(outDir),
       cssCodeSplit: false,
       emptyOutDir: false,
-      sourcemap: isDev ? 'inline' : false,
+      sourcemap: isDev,
       lib: {
         entry: entryFile,
         name: packageJson.name,
@@ -146,10 +168,15 @@ function resolveBuildConfig(target: BundleTarget): UserConfig['build'] {
       watch: watchEnabled ? {} : undefined,
       outDir: resolveOutDir(outDir),
       emptyOutDir: false,
-      sourcemap: isDev ? 'inline' : false,
+      sourcemap: isDev,
       rollupOptions: {
         input: {
           index: entryFile,
+        },
+        output: {
+          manualChunks(id) {
+            return resolvePageManualChunk(id)
+          },
         },
       },
     }
@@ -159,7 +186,7 @@ function resolveBuildConfig(target: BundleTarget): UserConfig['build'] {
     watch: watchEnabled ? {} : undefined,
     outDir: resolveOutDir(),
     emptyOutDir: false,
-    sourcemap: isDev ? 'inline' : false,
+    sourcemap: isDev,
   }
 }
 
