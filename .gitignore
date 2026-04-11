@@ -15,3 +15,4 @@ apps/auto-imports.d.ts
 apps/components.d.ts
 .eslintcache
 dist
+pnpm-lock.yaml
