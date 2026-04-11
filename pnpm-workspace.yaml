@@ -1,10 +1,10 @@
-shellEmulator: true
-trustPolicy: no-downgrade
-trustPolicyIgnoreAfter: 10080
-
 allowBuilds:
+  '@parcel/watcher': false
   dtrace-provider: true
   esbuild: true
   simple-git-hooks: true
   spawn-sync: true
   vue-demi: true
+shellEmulator: true
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 10080
