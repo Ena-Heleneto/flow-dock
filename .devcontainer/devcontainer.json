@@ -1,5 +1,5 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/typescript-node",
+  "image": "nexus.heleneto.online/docker-group/dotnet/devcontainers/typescript-node",
   "features": {},
   "postCreateCommand": "npx pnpm i"
 }
