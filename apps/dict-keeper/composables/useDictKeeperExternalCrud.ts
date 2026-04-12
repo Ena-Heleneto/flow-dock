@@ -9,13 +9,13 @@ export interface DictKeeperCrudEndpointConfig {
   delete: string
 }
 
-export interface DictKeeperConfigForm {
+export interface DictKeeperExternalCrudForm {
   basePath: string
   dictionary: DictKeeperCrudEndpointConfig
   item: DictKeeperCrudEndpointConfig
 }
 
-export interface DictKeeperConfigRecord extends DictKeeperConfigForm {
+export interface DictKeeperExternalCrudRecord extends DictKeeperExternalCrudForm {
   _id: string
   name: string
   isDeleted?: boolean
@@ -24,32 +24,33 @@ export interface DictKeeperConfigRecord extends DictKeeperConfigForm {
   updatedAt?: number
 }
 
-interface DictKeeperConfigItemResponseData {
-  item: DictKeeperConfigRecord | null
+interface DictKeeperExternalCrudItemResponseData {
+  item: DictKeeperExternalCrudRecord | null
 }
 
-interface DictKeeperConfigListResponseData {
-  items: DictKeeperConfigRecord[]
+interface DictKeeperExternalCrudListResponseData {
+  items: DictKeeperExternalCrudRecord[]
 }
 
-const DEFAULT_CONFIG_ID = 'dict-keeper-global-config'
-const DEFAULT_CONFIG_NAME = '默认配置'
+const DEFAULT_EXTERNAL_CRUD_ID = 'dict-keeper-global-external-crud'
+const DEFAULT_EXTERNAL_CRUD_NAME = '默认外部 CRUD'
+const REQUEST_TIMEOUT_MS = 12000
 
-interface LoadConfigOptions {
+interface LoadExternalCrudOptions {
   silent?: boolean
 }
 
-export function useDictKeeperConfig() {
-  const form = reactive<DictKeeperConfigForm>(createDefaultForm())
-  const selectedConfigId = ref('')
-  const configNameInput = ref('')
-  const configsList = ref<DictKeeperConfigRecord[]>([])
-  const loadedConfigId = ref('')
-  const loadedConfigName = ref('')
+export function useDictKeeperExternalCrud() {
+  const form = reactive<DictKeeperExternalCrudForm>(createDefaultForm())
+  const selectedExternalCrudId = ref('')
+  const externalCrudNameInput = ref('')
+  const externalCrudList = ref<DictKeeperExternalCrudRecord[]>([])
+  const loadedExternalCrudId = ref('')
+  const loadedExternalCrudName = ref('')
 
-  const configId = computed(() => loadedConfigId.value)
+  const externalCrudId = computed(() => loadedExternalCrudId.value)
 
-  const hasConfig = computed(() => loadedConfigId.value.length > 0)
+  const hasExternalCrud = computed(() => loadedExternalCrudId.value.length > 0)
   const isListLoading = ref(false)
   const isLoading = ref(false)
   const isSaving = ref(false)
@@ -59,11 +60,11 @@ export function useDictKeeperConfig() {
   const noticeText = ref('')
   const noticeTone = ref<NoticeTone>('neutral')
 
-  async function refreshConfigList() {
+  async function refreshExternalCrudList() {
     isListLoading.value = true
 
     try {
-      const data = await requestData<DictKeeperConfigListResponseData, { includeDeleted?: boolean }>('/dict-keeper/config.list', {
+      const data = await requestData<DictKeeperExternalCrudListResponseData, { includeDeleted?: boolean }>('/dict-keeper/external-crud/list', {
         method: 'GET',
         body: {
           includeDeleted: false,
@@ -71,26 +72,26 @@ export function useDictKeeperConfig() {
       })
 
       const normalizedItems = [...data.items].sort(compareByRecent)
-      configsList.value = normalizedItems
+      externalCrudList.value = normalizedItems
 
       if (normalizedItems.length === 0) {
-        selectedConfigId.value = ''
+        selectedExternalCrudId.value = ''
         clearLoadedSnapshot()
         return []
       }
 
-      const selectedExists = normalizedItems.some(item => item._id === selectedConfigId.value)
+      const selectedExists = normalizedItems.some(item => item._id === selectedExternalCrudId.value)
       if (!selectedExists)
-        selectedConfigId.value = ''
+        selectedExternalCrudId.value = ''
 
-      const loadedExists = normalizedItems.some(item => item._id === loadedConfigId.value)
+      const loadedExists = normalizedItems.some(item => item._id === loadedExternalCrudId.value)
       if (!loadedExists)
         clearLoadedSnapshot()
 
       return normalizedItems
     }
     catch (error) {
-      setNotice(`刷新配置列表失败：${toErrorMessage(error)}`, 'error')
+      setNotice(`刷新外部 CRUD 列表失败：${toErrorMessage(error)}`, 'error')
       return []
     }
     finally {
@@ -98,37 +99,37 @@ export function useDictKeeperConfig() {
     }
   }
 
-  async function loadConfig() {
+  async function loadExternalCrud() {
     clearValidationErrors()
     setNotice('', 'neutral')
 
-    selectedConfigId.value = ''
+    selectedExternalCrudId.value = ''
     clearLoadedSnapshot()
     resetForm()
-    configNameInput.value = ''
+    externalCrudNameInput.value = ''
 
-    const list = await refreshConfigList()
+    const list = await refreshExternalCrudList()
     if (list.length === 0) {
       resetForm()
-      configNameInput.value = DEFAULT_CONFIG_NAME
+      externalCrudNameInput.value = DEFAULT_EXTERNAL_CRUD_NAME
 
       if (noticeTone.value !== 'error')
-        setNotice('尚未创建后端配置，请先新建配置。', 'neutral')
+        setNotice('尚未创建外部 CRUD，请先新建。', 'neutral')
 
       return null
     }
 
-    setNotice('请先从列表选择一个配置并加载。', 'neutral')
+    setNotice('请先从列表选择一个外部 CRUD 并加载。', 'neutral')
     return null
   }
 
-  async function loadConfigById(id: string | undefined, options: LoadConfigOptions = {}) {
+  async function loadExternalCrudById(id: string | undefined, options: LoadExternalCrudOptions = {}) {
     const targetId = normalizeText(id)
     if (!targetId) {
       clearLoadedSnapshot()
 
       if (!options.silent)
-        setNotice('请先从配置列表中选择一项。', 'neutral')
+        setNotice('请先从外部 CRUD 列表中选择一项。', 'neutral')
 
       return null
     }
@@ -140,8 +141,8 @@ export function useDictKeeperConfig() {
       setNotice('', 'neutral')
 
     try {
-      const data = await requestData<DictKeeperConfigItemResponseData, { id?: string, includeDeleted?: boolean }>(
-        '/dict-keeper/config.read',
+      const data = await requestData<DictKeeperExternalCrudItemResponseData, { id?: string, includeDeleted?: boolean }>(
+        '/dict-keeper/external-crud/read',
         {
           method: 'GET',
           body: {
@@ -153,30 +154,30 @@ export function useDictKeeperConfig() {
 
       const record = data.item
       if (!record) {
-        selectedConfigId.value = ''
+        selectedExternalCrudId.value = ''
         clearLoadedSnapshot()
         resetForm()
-        configNameInput.value = ''
+        externalCrudNameInput.value = ''
 
         if (!options.silent)
-          setNotice('未找到所选配置，请刷新列表后重试。', 'error')
+          setNotice('未找到所选外部 CRUD，请刷新列表后重试。', 'error')
 
         return null
       }
 
-      selectedConfigId.value = record._id || DEFAULT_CONFIG_ID
+      selectedExternalCrudId.value = record._id || DEFAULT_EXTERNAL_CRUD_ID
       setLoadedSnapshot(record)
       applyRecord(record)
-      configNameInput.value = normalizeConfigName(record.name, record._id)
+      externalCrudNameInput.value = normalizeExternalCrudName(record.name, record._id)
 
       if (!options.silent)
-        setNotice('已加载所选配置。', 'success')
+        setNotice('已加载所选外部 CRUD。', 'success')
 
       return record
     }
     catch (error) {
       if (!options.silent)
-        setNotice(`加载配置失败：${toErrorMessage(error)}`, 'error')
+        setNotice(`加载外部 CRUD 失败：${toErrorMessage(error)}`, 'error')
 
       return null
     }
@@ -185,32 +186,32 @@ export function useDictKeeperConfig() {
     }
   }
 
-  async function saveConfig() {
+  async function saveExternalCrud() {
     clearValidationErrors()
     if (!validateForm()) {
       setNotice('请先修正表单校验错误后再保存。', 'error')
       return null
     }
 
-    const normalizedInputName = normalizeText(configNameInput.value)
-    const normalizedLoadedId = normalizeText(loadedConfigId.value)
-    const normalizedLoadedName = normalizeText(loadedConfigName.value)
+    const normalizedInputName = normalizeText(externalCrudNameInput.value)
+    const normalizedLoadedId = normalizeText(loadedExternalCrudId.value)
+    const normalizedLoadedName = normalizeText(loadedExternalCrudName.value)
     const loadedExistsInList = normalizedLoadedId.length > 0
-      && configsList.value.some(item => item._id === normalizedLoadedId)
+      && externalCrudList.value.some(item => item._id === normalizedLoadedId)
 
-    const matchedConfigByName = findConfigByName(normalizedInputName)
+    const matchedByName = findExternalCrudByName(normalizedInputName)
 
     const shouldUpdateLoaded = loadedExistsInList
       && normalizedInputName.length > 0
       && normalizedInputName === normalizedLoadedName
 
-    const shouldUpdateByName = !shouldUpdateLoaded && Boolean(matchedConfigByName)
+    const shouldUpdateByName = !shouldUpdateLoaded && Boolean(matchedByName)
     const shouldUpdate = shouldUpdateLoaded || shouldUpdateByName
     const updateTargetId = shouldUpdateLoaded
       ? normalizedLoadedId
-      : normalizeText(matchedConfigByName?._id)
+      : normalizeText(matchedByName?._id)
 
-    const nextId = shouldUpdate ? updateTargetId : createConfigId()
+    const nextId = shouldUpdate ? updateTargetId : createExternalCrudId()
 
     isSaving.value = true
     setNotice('', 'neutral')
@@ -218,42 +219,42 @@ export function useDictKeeperConfig() {
     try {
       const payload = {
         id: nextId,
-        name: normalizeConfigName(configNameInput.value, nextId),
+        name: normalizeExternalCrudName(externalCrudNameInput.value, nextId),
         ...buildNormalizedFormPayload(),
       }
 
       const data = shouldUpdate
-        ? await requestData<DictKeeperConfigItemResponseData, typeof payload>('/dict-keeper/config.update', {
+        ? await requestData<DictKeeperExternalCrudItemResponseData, typeof payload>('/dict-keeper/external-crud/update', {
             method: 'PUT',
             body: payload,
           })
-        : await requestData<DictKeeperConfigItemResponseData, typeof payload>('/dict-keeper/config.create', {
+        : await requestData<DictKeeperExternalCrudItemResponseData, typeof payload>('/dict-keeper/external-crud/create', {
             method: 'POST',
             body: payload,
           })
 
       const record = data.item
       if (!record)
-        throw new Error('后端未返回配置记录')
+        throw new Error('后端未返回外部 CRUD 记录')
 
-      selectedConfigId.value = record._id || DEFAULT_CONFIG_ID
+      selectedExternalCrudId.value = record._id || DEFAULT_EXTERNAL_CRUD_ID
       setLoadedSnapshot(record)
       applyRecord(record)
-      configNameInput.value = normalizeConfigName(record.name, record._id)
+      externalCrudNameInput.value = normalizeExternalCrudName(record.name, record._id)
 
-      await refreshConfigList()
+      await refreshExternalCrudList()
       const successText = shouldUpdateLoaded
-        ? '配置更新成功。'
+        ? '外部 CRUD 更新成功。'
         : shouldUpdateByName
-          ? '检测到同名配置，已覆盖更新。'
-          : '配置另存为新配置成功。'
+          ? '检测到同名外部 CRUD，已覆盖更新。'
+          : '外部 CRUD 另存为新记录成功。'
 
       setNotice(successText, 'success')
 
       return record
     }
     catch (error) {
-      setNotice(`保存配置失败：${toErrorMessage(error)}`, 'error')
+      setNotice(`保存外部 CRUD 失败：${toErrorMessage(error)}`, 'error')
       return null
     }
     finally {
@@ -261,7 +262,7 @@ export function useDictKeeperConfig() {
     }
   }
 
-  async function createConfigFromCurrent() {
+  async function createExternalCrudFromCurrent() {
     clearValidationErrors()
     if (!validateForm()) {
       setNotice('请先修正表单校验错误后再新建。', 'error')
@@ -272,45 +273,45 @@ export function useDictKeeperConfig() {
     setNotice('', 'neutral')
 
     try {
-      const normalizedInputName = normalizeText(configNameInput.value)
-      const matchedConfigByName = findConfigByName(normalizedInputName)
-      const shouldUpdateByName = Boolean(matchedConfigByName)
+      const normalizedInputName = normalizeText(externalCrudNameInput.value)
+      const matchedByName = findExternalCrudByName(normalizedInputName)
+      const shouldUpdateByName = Boolean(matchedByName)
       const nextId = shouldUpdateByName
-        ? normalizeText(matchedConfigByName?._id)
-        : createConfigId()
+        ? normalizeText(matchedByName?._id)
+        : createExternalCrudId()
 
       const payload = {
         id: nextId,
-        name: normalizeConfigName(configNameInput.value, nextId),
+        name: normalizeExternalCrudName(externalCrudNameInput.value, nextId),
         ...buildNormalizedFormPayload(),
       }
 
       const data = shouldUpdateByName
-        ? await requestData<DictKeeperConfigItemResponseData, typeof payload>('/dict-keeper/config.update', {
+        ? await requestData<DictKeeperExternalCrudItemResponseData, typeof payload>('/dict-keeper/external-crud/update', {
             method: 'PUT',
             body: payload,
           })
-        : await requestData<DictKeeperConfigItemResponseData, typeof payload>('/dict-keeper/config.create', {
+        : await requestData<DictKeeperExternalCrudItemResponseData, typeof payload>('/dict-keeper/external-crud/create', {
             method: 'POST',
             body: payload,
           })
 
       const record = data.item
       if (!record)
-        throw new Error('后端未返回配置记录')
+        throw new Error('后端未返回外部 CRUD 记录')
 
-      selectedConfigId.value = record._id || DEFAULT_CONFIG_ID
+      selectedExternalCrudId.value = record._id || DEFAULT_EXTERNAL_CRUD_ID
       setLoadedSnapshot(record)
       applyRecord(record)
-      configNameInput.value = normalizeConfigName(record.name, record._id)
+      externalCrudNameInput.value = normalizeExternalCrudName(record.name, record._id)
 
-      await refreshConfigList()
-      setNotice(shouldUpdateByName ? '检测到同名配置，已覆盖更新。' : '新配置创建成功。', 'success')
+      await refreshExternalCrudList()
+      setNotice(shouldUpdateByName ? '检测到同名外部 CRUD，已覆盖更新。' : '新外部 CRUD 创建成功。', 'success')
 
       return record
     }
     catch (error) {
-      setNotice(`新建配置失败：${toErrorMessage(error)}`, 'error')
+      setNotice(`新建外部 CRUD 失败：${toErrorMessage(error)}`, 'error')
       return null
     }
     finally {
@@ -318,10 +319,10 @@ export function useDictKeeperConfig() {
     }
   }
 
-  async function deleteConfig() {
-    const targetId = normalizeText(loadedConfigId.value)
+  async function deleteExternalCrud() {
+    const targetId = normalizeText(loadedExternalCrudId.value)
     if (!targetId) {
-      setNotice('当前没有可删除的配置。', 'neutral')
+      setNotice('当前没有可删除的外部 CRUD。', 'neutral')
       return null
     }
 
@@ -330,31 +331,29 @@ export function useDictKeeperConfig() {
     setNotice('', 'neutral')
 
     try {
-      const data = await requestData<DictKeeperConfigItemResponseData, { id?: string }>('/dict-keeper/config.delete', {
+      const data = await requestData<DictKeeperExternalCrudItemResponseData, { id?: string }>('/dict-keeper/external-crud/delete', {
         method: 'DELETE',
         body: {
           id: targetId,
         },
       })
 
-      const list = await refreshConfigList()
+      const list = await refreshExternalCrudList()
 
       clearLoadedSnapshot()
-      selectedConfigId.value = ''
+      selectedExternalCrudId.value = ''
       resetForm()
 
-      if (list.length === 0) {
-        configNameInput.value = DEFAULT_CONFIG_NAME
-      }
-      else {
-        configNameInput.value = ''
-      }
+      if (list.length === 0)
+        externalCrudNameInput.value = DEFAULT_EXTERNAL_CRUD_NAME
+      else
+        externalCrudNameInput.value = ''
 
-      setNotice('配置删除成功。', 'success')
+      setNotice('外部 CRUD 删除成功。', 'success')
       return data.item
     }
     catch (error) {
-      setNotice(`删除配置失败：${toErrorMessage(error)}`, 'error')
+      setNotice(`删除外部 CRUD 失败：${toErrorMessage(error)}`, 'error')
       return null
     }
     finally {
@@ -382,11 +381,11 @@ export function useDictKeeperConfig() {
 
   return {
     form,
-    configNameInput,
-    selectedConfigId,
-    configId,
-    configsList,
-    hasConfig,
+    externalCrudNameInput,
+    selectedExternalCrudId,
+    externalCrudId,
+    externalCrudList,
+    hasExternalCrud,
     isListLoading,
     isLoading,
     isSaving,
@@ -395,16 +394,16 @@ export function useDictKeeperConfig() {
     noticeText,
     noticeTone,
     validationErrors,
-    refreshConfigList,
-    loadConfig,
-    loadConfigById,
-    saveConfig,
-    createConfigFromCurrent,
-    deleteConfig,
+    refreshExternalCrudList,
+    loadExternalCrud,
+    loadExternalCrudById,
+    saveExternalCrud,
+    createExternalCrudFromCurrent,
+    deleteExternalCrud,
     resetForm,
   }
 
-  function applyRecord(record: DictKeeperConfigRecord) {
+  function applyRecord(record: DictKeeperExternalCrudRecord) {
     form.basePath = normalizeText(record.basePath)
 
     form.dictionary.create = normalizeText(record.dictionary?.create)
@@ -418,7 +417,7 @@ export function useDictKeeperConfig() {
     form.item.delete = normalizeText(record.item?.delete)
   }
 
-  function buildNormalizedFormPayload(): DictKeeperConfigForm {
+  function buildNormalizedFormPayload(): DictKeeperExternalCrudForm {
     return {
       basePath: normalizeText(form.basePath),
       dictionary: {
@@ -438,7 +437,7 @@ export function useDictKeeperConfig() {
 
   function validateForm() {
     const entries: Array<{ label: string, value: string }> = [
-      { label: '配置名称', value: configNameInput.value },
+      { label: '外部 CRUD 名称', value: externalCrudNameInput.value },
       { label: '接口基础路径', value: form.basePath },
       { label: '字典-创建接口', value: form.dictionary.create },
       { label: '字典-读取接口', value: form.dictionary.read },
@@ -467,22 +466,22 @@ export function useDictKeeperConfig() {
     noticeTone.value = tone
   }
 
-  function setLoadedSnapshot(record: DictKeeperConfigRecord) {
-    loadedConfigId.value = normalizeText(record._id)
-    loadedConfigName.value = normalizeText(record.name)
+  function setLoadedSnapshot(record: DictKeeperExternalCrudRecord) {
+    loadedExternalCrudId.value = normalizeText(record._id)
+    loadedExternalCrudName.value = normalizeText(record.name)
   }
 
   function clearLoadedSnapshot() {
-    loadedConfigId.value = ''
-    loadedConfigName.value = ''
+    loadedExternalCrudId.value = ''
+    loadedExternalCrudName.value = ''
   }
 
-  function findConfigByName(name: string) {
+  function findExternalCrudByName(name: string) {
     const normalized = normalizeText(name)
     if (!normalized)
       return null
 
-    return configsList.value.find(item => normalizeText(item.name) === normalized) ?? null
+    return externalCrudList.value.find(item => normalizeText(item.name) === normalized) ?? null
   }
 }
 
@@ -493,7 +492,12 @@ async function requestData<TData, TBody = unknown>(
     body?: TBody
   },
 ): Promise<TData> {
-  const response = await request<TData, TBody>(path, options)
+  const response = await withTimeout(
+    request<TData, TBody>(path, options),
+    REQUEST_TIMEOUT_MS,
+    `请求超时（${REQUEST_TIMEOUT_MS}ms）：${path}`,
+  )
+
   if (response.ok)
     return response.data
 
@@ -501,7 +505,25 @@ async function requestData<TData, TBody = unknown>(
   throw new Error(`${errorCode}${response.error.message}`)
 }
 
-function createDefaultForm(): DictKeeperConfigForm {
+function withTimeout<TData>(promise: Promise<TData>, timeoutMs: number, message: string): Promise<TData> {
+  return new Promise<TData>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message))
+    }, timeoutMs)
+
+    promise
+      .then((data) => {
+        clearTimeout(timer)
+        resolve(data)
+      })
+      .catch((error) => {
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
+}
+
+function createDefaultForm(): DictKeeperExternalCrudForm {
   return {
     basePath: '',
     dictionary: {
@@ -526,32 +548,32 @@ function normalizeText(input: unknown) {
   return input.trim()
 }
 
-function normalizeConfigName(input: unknown, id: string) {
+function normalizeExternalCrudName(input: unknown, id: string) {
   const normalized = normalizeText(input)
   if (normalized)
     return normalized
 
-  if (id === DEFAULT_CONFIG_ID)
-    return DEFAULT_CONFIG_NAME
+  if (id === DEFAULT_EXTERNAL_CRUD_ID)
+    return DEFAULT_EXTERNAL_CRUD_NAME
 
-  return buildTimestampConfigName()
+  return buildTimestampExternalCrudName()
 }
 
-function buildTimestampConfigName() {
+function buildTimestampExternalCrudName() {
   const now = new Date()
   const pad2 = (value: number) => String(value).padStart(2, '0')
 
-  return `配置 ${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
+  return `外部CRUD ${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
 }
 
-function createConfigId() {
+function createExternalCrudId() {
   if (typeof globalThis.crypto?.randomUUID === 'function')
     return globalThis.crypto.randomUUID()
 
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function compareByRecent(left: DictKeeperConfigRecord, right: DictKeeperConfigRecord) {
+function compareByRecent(left: DictKeeperExternalCrudRecord, right: DictKeeperExternalCrudRecord) {
   const updatedGap = toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt)
   if (updatedGap !== 0)
     return updatedGap

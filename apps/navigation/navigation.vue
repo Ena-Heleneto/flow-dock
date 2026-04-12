@@ -60,7 +60,7 @@ async function handleOpenDatabaseManagerPage() {
 
 <template>
   <main class="w-full px-4 py-5 text-center text-gray-700">
-    <Logo />
+    <!-- <Logo /> -->
 
     <div flex="~ col">
       <button class="btn mt-2" @click="openGlobalSettingsPage">

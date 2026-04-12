@@ -1,6 +1,6 @@
-import type { DictKeeperCrudEndpointConfig } from '@/schema/dict-keeper/config.schema'
+import type { DictKeeperCrudEndpointConfig } from '@/schema/dict-keeper/external-crud.schema'
 import { defineRouterHandle } from '@/driver/define-router-handle.driver'
-import { createDictKeeperConfig } from '@/service/dict-keeper-config.service'
+import { createDictKeeperExternalCrud } from '@/service/dict-keeper-external-crud.service'
 
 interface CreateBody {
   id?: string
@@ -13,7 +13,7 @@ interface CreateBody {
 export default defineRouterHandle<CreateBody>(async (event) => {
   const body = event.request.body || {}
 
-  const item = await createDictKeeperConfig({
+  const item = await createDictKeeperExternalCrud({
     id: body.id,
     name: body.name,
     basePath: body.basePath,

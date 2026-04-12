@@ -1,18 +1,17 @@
 <script lang="ts" setup>
+import DictKeeperDict from '~/dict-keeper/components/dict/index.vue'
+import DictKeeperHeader from '~/dict-keeper/components/header/index.vue'
+import DictKeeperToolbar from '~/dict-keeper/components/toolbar/index.vue'
+import { MOCK_LOG_LIST } from '~/dict-keeper/mock/log.mock'
+import DictKeeperPreview from '~/dict-keeper/preview.vue'
+import DictKeeperSetting from '~/dict-keeper/setting.vue'
 import DictKeeperConsole from '~/shared/components/console/index.vue'
 import { useLogger } from '~/shared/composables/useLogger'
-import DictKeeperDict from './components/dict/index.vue'
-import DictKeeperHeader from './components/header/index.vue'
-import DictKeeperToolbar from './components/toolbar/index.vue'
-import { MOCK_LOG_LIST } from './mock/log.mock'
-import DictKeeperPreview from './preview.vue'
-import DictKeeperSetting from './setting.vue'
 
 const deleteCount = ref(0)
 
 const { insertManyLogs } = useLogger()
 insertManyLogs(MOCK_LOG_LIST)
-
 const item = {
   label: '测试',
   value: 'test',

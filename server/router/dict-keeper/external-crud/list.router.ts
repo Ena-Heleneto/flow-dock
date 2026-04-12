@@ -1,5 +1,5 @@
 import { defineRouterHandle } from '@/driver/define-router-handle.driver'
-import { listDictKeeperConfigs } from '@/service/dict-keeper-config.service'
+import { listDictKeeperExternalCruds } from '@/service/dict-keeper-external-crud.service'
 
 interface ListBody {
   includeDeleted?: boolean
@@ -8,7 +8,7 @@ interface ListBody {
 export default defineRouterHandle<ListBody>(async (event) => {
   const body = event.request.body || {}
 
-  const items = await listDictKeeperConfigs({
+  const items = await listDictKeeperExternalCruds({
     includeDeleted: body.includeDeleted === true,
   }, {
     transaction: event.context.transaction,

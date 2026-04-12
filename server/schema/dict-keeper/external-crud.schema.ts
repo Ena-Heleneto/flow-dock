@@ -7,7 +7,7 @@ export interface DictKeeperCrudEndpointConfig extends Record<string, unknown> {
   delete: string
 }
 
-export interface DictKeeperConfigDocument extends Record<string, unknown> {
+export interface DictKeeperExternalCrudDocument extends Record<string, unknown> {
   _id: string
   name: string
   basePath: string
@@ -29,8 +29,8 @@ export interface DictKeeperConfigDocument extends Record<string, unknown> {
   }
 }
 
-const dictKeeperConfigSchema = defineSchemaHandle<DictKeeperConfigDocument>({
-  name: 'dict-keeper-config',
+const dictKeeperExternalCrudSchema = defineSchemaHandle<DictKeeperExternalCrudDocument>({
+  name: 'dict-keeper-external-crud',
   keyPath: '_id',
   timestamps: true,
   indexes: [
@@ -42,4 +42,4 @@ const dictKeeperConfigSchema = defineSchemaHandle<DictKeeperConfigDocument>({
   ],
 })
 
-export default dictKeeperConfigSchema
+export default dictKeeperExternalCrudSchema

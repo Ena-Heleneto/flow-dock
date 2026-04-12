@@ -103,7 +103,7 @@ onMessage('router-request', async (message) => {
     return successResponse
   }
   catch (error) {
-    const normalizedError = toRouterError(error)
+    const normalizedError = toSafeRouterError(error)
     consola.error(
       `[router] execution failed: ${routeRecord.method} ${routeRecord.path} (${routeRecord.modulePath})`,
       normalizedError,
@@ -114,7 +114,15 @@ onMessage('router-request', async (message) => {
       code: normalizedError.code ?? 'ROUTE_EXECUTION_FAILED',
     }, trace)
 
-    await runErrorHook(runtimePlugins, event, failureResponse.error)
+    try {
+      await runErrorHook(runtimePlugins, event, failureResponse.error)
+    }
+    catch (hookError) {
+      consola.error(
+        `[router] onError hook failed: ${routeRecord.method} ${routeRecord.path} (${routeRecord.modulePath})`,
+        toSafeRouterError(hookError),
+      )
+    }
 
     return failureResponse
   }
@@ -411,5 +419,52 @@ function toRouterError(error: unknown): RouterError {
   return {
     message: 'Unknown router error',
     details: error,
+  }
+}
+
+function toSafeRouterError(error: unknown): RouterError {
+  try {
+    return toRouterError(error)
+  }
+  catch (normalizeError) {
+    return {
+      message: 'Failed to normalize router error',
+      code: 'ROUTER_ERROR_NORMALIZE_FAILED',
+      details: {
+        error: toUnknownErrorDetails(error),
+        normalizeError: toUnknownErrorDetails(normalizeError),
+      },
+    }
+  }
+}
+
+function toUnknownErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    }
+  }
+
+  if (typeof error === 'string') {
+    return {
+      message: error,
+    }
+  }
+
+  if (error && typeof error === 'object') {
+    try {
+      return JSON.parse(JSON.stringify(error))
+    }
+    catch {
+      return {
+        type: Object.prototype.toString.call(error),
+      }
+    }
+  }
+
+  return {
+    value: error,
   }
 }

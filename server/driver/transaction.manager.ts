@@ -43,6 +43,9 @@ let schemaVersion = 1
 let databasePromise: Promise<IDBDatabase> | null = null
 let openedDatabase: IDBDatabase | null = null
 let openedDatabaseVersion: number | null = null
+let schemaRepairPromise: Promise<void> | null = null
+
+const failedStoreRepairSignatures = new Set<string>()
 
 registerDefaultStore()
 
@@ -85,19 +88,42 @@ export async function beginTransaction(options: BeginTransactionOptions = {}): P
   if (typeof indexedDB === 'undefined')
     return createUnavailableTransaction(mode)
 
-  const database = await getDatabase()
+  let database = await getDatabase()
+  let missingStores = resolveMissingStores(database, resolvedStoreNames)
 
-  for (const storeName of resolvedStoreNames) {
-    if (!database.objectStoreNames.contains(storeName)) {
-      throw createIndexedDbDriverError(
-        `Store "${storeName}" does not exist in IndexedDB`,
-        'STORE_NOT_FOUND',
-        {
-          storeName,
-          knownStores: [...database.objectStoreNames],
-        },
-      )
+  let repairAttempted = false
+  let repairError: unknown
+
+  if (missingStores.length > 0) {
+    const repairResult = await tryRepairMissingStores(missingStores, database.version)
+    repairAttempted = repairResult.attempted
+    repairError = repairResult.error
+
+    if (repairAttempted) {
+      database = await getDatabase()
+      missingStores = resolveMissingStores(database, resolvedStoreNames)
     }
+  }
+
+  if (missingStores.length > 0) {
+    const message = missingStores.length === 1
+      ? `Store "${missingStores[0]}" does not exist in IndexedDB`
+      : `Stores [${missingStores.join(', ')}] do not exist in IndexedDB`
+
+    throw createIndexedDbDriverError(
+      message,
+      'STORE_NOT_FOUND',
+      {
+        storeName: missingStores[0],
+        missingStores,
+        requestedStores: resolvedStoreNames,
+        knownStores: [...database.objectStoreNames],
+        registeredStores: [...registeredStores.keys()],
+        schemaVersion,
+        repairAttempted,
+        repairError: toErrorDetails(repairError),
+      },
+    )
   }
 
   const transaction = database.transaction(resolvedStoreNames, mode)
@@ -116,6 +142,54 @@ function resolveStoreNames(input: string[] | undefined) {
   return fallbackStoreNames.length > 0
     ? fallbackStoreNames
     : [DEFAULT_STORE_NAME]
+}
+
+function resolveMissingStores(database: IDBDatabase, requestedStores: string[]) {
+  return requestedStores.filter(storeName => !database.objectStoreNames.contains(storeName))
+}
+
+interface StoreRepairResult {
+  attempted: boolean
+  error?: unknown
+}
+
+async function tryRepairMissingStores(missingStores: string[], databaseVersion: number): Promise<StoreRepairResult> {
+  const repairableStores = missingStores
+    .filter(storeName => registeredStores.has(storeName))
+    .sort((leftStore, rightStore) => leftStore.localeCompare(rightStore))
+
+  if (repairableStores.length === 0)
+    return { attempted: false }
+
+  const repairSignature = repairableStores.join('|')
+  if (failedStoreRepairSignatures.has(repairSignature))
+    return { attempted: false }
+
+  try {
+    await runSchemaRepair(databaseVersion)
+    return { attempted: true }
+  }
+  catch (error) {
+    failedStoreRepairSignatures.add(repairSignature)
+    return {
+      attempted: true,
+      error,
+    }
+  }
+}
+
+async function runSchemaRepair(databaseVersion: number) {
+  if (!schemaRepairPromise) {
+    schemaRepairPromise = (async () => {
+      schemaVersion = Math.max(schemaVersion, databaseVersion)
+      bumpSchemaVersion()
+      await getDatabase()
+    })().finally(() => {
+      schemaRepairPromise = null
+    })
+  }
+
+  await schemaRepairPromise
 }
 
 function createManagedTransaction(
@@ -140,7 +214,22 @@ function createManagedTransaction(
         return
 
       settled = true
-      reject(toError(error, 'IndexedDB transaction failed', 'TRANSACTION_FAILED'))
+
+      try {
+        reject(toError(error, 'IndexedDB transaction failed', 'TRANSACTION_FAILED'))
+      }
+      catch (normalizeError) {
+        reject(
+          createIndexedDbDriverError(
+            'Failed to normalize IndexedDB transaction error',
+            'TRANSACTION_ERROR_NORMALIZE_FAILED',
+            {
+              error: toErrorDetails(error),
+              normalizeError: toErrorDetails(normalizeError),
+            },
+          ),
+        )
+      }
     }
 
     transaction.addEventListener('complete', () => {
@@ -320,13 +409,34 @@ async function getDatabase() {
     if (databasePromise === pending)
       databasePromise = null
 
+    if (isLowerVersionOpenAttempt(error)) {
+      const fallbackPending = openDatabase()
+      databasePromise = fallbackPending
+
+      try {
+        const database = await fallbackPending
+        openedDatabase = database
+        openedDatabaseVersion = database.version
+        schemaVersion = Math.max(schemaVersion, database.version)
+        return database
+      }
+      catch (fallbackError) {
+        if (databasePromise === fallbackPending)
+          databasePromise = null
+
+        throw fallbackError
+      }
+    }
+
     throw error
   }
 }
 
-function openDatabase(version: number): Promise<IDBDatabase> {
+function openDatabase(version?: number): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE_NAME, version)
+    const request = version === undefined
+      ? indexedDB.open(DATABASE_NAME)
+      : indexedDB.open(DATABASE_NAME, version)
     let settled = false
 
     const resolveOnce = (database: IDBDatabase) => {
@@ -374,7 +484,7 @@ function openDatabase(version: number): Promise<IDBDatabase> {
       rejectOnce(
         createIndexedDbDriverError('IndexedDB open request blocked', 'INDEXED_DB_OPEN_BLOCKED', {
           databaseName: DATABASE_NAME,
-          version,
+          version: version ?? '(current)',
         }),
       )
     }
@@ -570,6 +680,13 @@ function isInvalidTransactionStateError(error: unknown) {
     && (error.name === 'InvalidStateError' || error.name === 'TransactionInactiveError')
 }
 
+function isLowerVersionOpenAttempt(error: unknown) {
+  if (!(error instanceof Error))
+    return false
+
+  return error.name === 'VersionError'
+}
+
 function createTransactionId() {
   if (typeof globalThis.crypto?.randomUUID === 'function')
     return `tx:${globalThis.crypto.randomUUID()}`
@@ -584,11 +701,57 @@ function createIndexedDbDriverError(message: string, code: string, details?: unk
   })
 }
 
-function toError(error: unknown, fallbackMessage: string, fallbackCode: string) {
+function toErrorDetails(error: unknown) {
+  if (!error)
+    return undefined
+
   if (error instanceof Error) {
-    return Object.assign(error, {
-      code: (error as IndexedDbDriverError).code ?? fallbackCode,
-    })
+    return {
+      name: error.name,
+      message: error.message,
+      code: resolveErrorCode(error),
+      stack: error.stack,
+    }
+  }
+
+  return {
+    value: error,
+  }
+}
+
+function resolveErrorCode(error: unknown) {
+  if (!error || typeof error !== 'object')
+    return undefined
+
+  try {
+    const code = (error as Partial<IndexedDbDriverError>).code
+    return typeof code === 'string' ? code : undefined
+  }
+  catch {
+    return undefined
+  }
+}
+
+function isIndexedDbDriverError(error: unknown): error is IndexedDbDriverError {
+  return error instanceof Error && typeof resolveErrorCode(error) === 'string'
+}
+
+function toError(error: unknown, fallbackMessage: string, fallbackCode: string) {
+  if (isIndexedDbDriverError(error))
+    return error
+
+  if (error instanceof Error) {
+    const wrapped = createIndexedDbDriverError(
+      error.message || fallbackMessage,
+      resolveErrorCode(error) ?? fallbackCode,
+      toErrorDetails(error),
+    )
+
+    wrapped.name = error.name
+    if (typeof error.stack === 'string')
+      wrapped.stack = error.stack
+
+    return wrapped
   }
 
   return createIndexedDbDriverError(fallbackMessage, fallbackCode, error)

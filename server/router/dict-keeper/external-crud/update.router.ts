@@ -1,6 +1,6 @@
-import type { DictKeeperCrudEndpointConfig } from '@/schema/dict-keeper/config.schema'
+import type { DictKeeperCrudEndpointConfig } from '@/schema/dict-keeper/external-crud.schema'
 import { defineRouterHandle } from '@/driver/define-router-handle.driver'
-import { updateDictKeeperConfig } from '@/service/dict-keeper-config.service'
+import { updateDictKeeperExternalCrud } from '@/service/dict-keeper-external-crud.service'
 
 interface UpdateBody {
   id?: string
@@ -22,12 +22,12 @@ export default defineRouterHandle<UpdateBody>(async (event) => {
   const hasPatch = body.name !== undefined || body.basePath !== undefined || body.dictionary !== undefined || body.item !== undefined
 
   if (!hasPatch) {
-    throw Object.assign(new Error('At least one config field is required for update'), {
+    throw Object.assign(new Error('At least one external CRUD field is required for update'), {
       code: 'INVALID_BODY_PATCH',
     })
   }
 
-  const item = await updateDictKeeperConfig({
+  const item = await updateDictKeeperExternalCrud({
     id,
     name: body.name,
     basePath: body.basePath,
