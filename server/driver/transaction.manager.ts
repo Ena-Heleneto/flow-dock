@@ -2,7 +2,7 @@ import type {
   RouterRequestTransaction,
   RouterTransactionMode,
   RouterTransactionStatus,
-} from 'playground/runtime/types'
+} from '@/runtime/types'
 
 const DATABASE_NAME = 'flow-dock-indexeddb'
 const DEFAULT_STORE_NAME = '__flowdock_meta__'

@@ -1,8 +1,8 @@
+import type { ProtocolWithReturn } from 'webext-bridge'
 import type {
   RouterRequestPayload,
   RouterResponse,
-} from 'playground/runtime/types'
-import type { ProtocolWithReturn } from 'webext-bridge'
+} from '@/runtime/types'
 
 declare module 'webext-bridge' {
   export interface ProtocolMap {

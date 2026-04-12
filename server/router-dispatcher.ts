@@ -8,13 +8,13 @@ import type {
   RouterSuccess,
 } from '@/driver/define-router-handle.driver'
 import { consola } from 'consola'
-import { buildRouterEvent, normalizeHeaders, normalizeMeta } from 'playground/runtime/context'
-import { runMiddlewareChain } from 'playground/runtime/middleware'
 import { onMessage } from 'webext-bridge/background'
 import browser from 'webextension-polyfill'
 import { isMiddlewareHandle } from '@/driver/define-middleware-handle.driver'
 import { isPluginHandle } from '@/driver/define-plugin-handle.driver'
 import { isRouterHandle } from '@/driver/define-router-handle.driver'
+import { buildRouterEvent, normalizeHeaders, normalizeMeta } from '@/runtime/context'
+import { runMiddlewareChain } from '@/runtime/middleware'
 
 interface RouterModuleExport {
   default?: unknown

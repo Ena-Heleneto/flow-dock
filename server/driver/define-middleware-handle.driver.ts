@@ -1,5 +1,5 @@
-import type { RouterMiddleware, RouterNext } from 'playground/runtime/middleware'
-import { defineMiddleware } from 'playground/runtime/middleware'
+import type { RouterMiddleware, RouterNext } from '@/runtime/middleware'
+import { defineMiddleware } from '@/runtime/middleware'
 
 export type { RouterMiddleware, RouterNext }
 

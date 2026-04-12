@@ -1,4 +1,4 @@
-import type { RouterRequestTransaction } from 'playground/runtime/types'
+import type { RouterRequestTransaction } from '@/runtime/types'
 import type {
   DictKeeperConfigDocument,
   DictKeeperCrudEndpointConfig,

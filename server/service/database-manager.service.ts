@@ -1,4 +1,4 @@
-import type { RouterRequestTransaction } from 'playground/runtime/types'
+import type { RouterRequestTransaction } from '@/runtime/types'
 import itemsSchema from '@/schema/database-manager/document-items.schema'
 import documentsSchema from '@/schema/database-manager/documents.schema'
 

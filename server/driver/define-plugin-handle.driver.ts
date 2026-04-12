@@ -1,5 +1,5 @@
-import type { RuntimePlugin, RuntimePluginHooks } from 'playground/runtime/plugin'
-import { definePlugin } from 'playground/runtime/plugin'
+import type { RuntimePlugin, RuntimePluginHooks } from '@/runtime/plugin'
+import { definePlugin } from '@/runtime/plugin'
 
 const PLUGIN_HOOK_KEYS: ReadonlyArray<keyof RuntimePluginHooks> = [
   'onContextCreated',

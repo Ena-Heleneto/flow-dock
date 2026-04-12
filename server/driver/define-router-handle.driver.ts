@@ -11,7 +11,7 @@ import type {
   RouterRequestPayload,
   RouterResponse,
   RouterSuccess,
-} from 'playground/runtime/types'
+} from '@/runtime/types'
 
 export type {
   AnyRouterHandle,

@@ -16,3 +16,4 @@ apps/components.d.ts
 .eslintcache
 dist
 pnpm-lock.yaml
+.pnpm-store

@@ -1,5 +1,5 @@
-export type { RouterRequestOptions } from 'playground/client/request'
+export type { RouterRequestOptions } from '~/client/request'
 export {
   request,
   requestOrThrow,
-} from 'playground/client/request'
+} from '~/client/request'

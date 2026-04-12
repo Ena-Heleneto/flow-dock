@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import ConsoleContent from './content.vue'
-import ConsoleFooter from './footer.vue'
-import ConsoleHeader from './header.vue'
+import ConsoleContent from '~/shared/components/console/content.vue'
+import ConsoleFooter from '~/shared/components/console/footer.vue'
+import ConsoleHeader from '~/shared/components/console/header.vue'
 </script>
 
 <template>

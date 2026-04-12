@@ -1,4 +1,4 @@
-import type { RouterRequestTransaction, RouterTransactionMode } from 'playground/runtime/types'
+import type { RouterRequestTransaction, RouterTransactionMode } from '@/runtime/types'
 import { beginTransaction, registerIndexedDbStore } from '@/driver/transaction.manager'
 
 type AnyDocument = Record<string, unknown>

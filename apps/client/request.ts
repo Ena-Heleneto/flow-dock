@@ -3,7 +3,7 @@ import type {
   RouterRequestMeta,
   RouterRequestPayload,
   RouterResponse,
-} from 'playground/runtime/types'
+} from '@/runtime/types'
 import { sendMessage } from 'webext-bridge/options'
 
 const QUERY_AND_HASH_SUFFIX_RE = /[#?].*$/

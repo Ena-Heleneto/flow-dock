@@ -195,7 +195,6 @@ export const sharedConfig: UserConfig = {
     alias: {
       '~/': `${resolve(__dirname, 'apps')}/`,
       '@/': `${resolve(__dirname, 'server')}/`,
-      'playground/': `${resolve(__dirname, 'playground')}/`,
     },
   },
   define: {

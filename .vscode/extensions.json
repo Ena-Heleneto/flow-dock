@@ -8,6 +8,7 @@
     "gruntfuggly.todo-tree",
     "usernamehw.errorlens",
     "vue.volar",
-    "hollowtree.vue-snippets"
+    "hollowtree.vue-snippets",
+    "ms-azuretools.vscode-containers"
   ]
 }

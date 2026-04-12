@@ -10,8 +10,7 @@
     "moduleResolution": "bundler",
     "paths": {
       "~/*": ["apps/*"],
-      "@/*": ["server/*"],
-      "playground/*": ["playground/*"]
+      "@/*": ["server/*"]
     },
     "resolveJsonModule": true,
     "types": [
