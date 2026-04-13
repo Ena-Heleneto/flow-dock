@@ -4,9 +4,14 @@ import type {
   RequestRecorderPendingBundle,
   RequestRecorderSessionSnapshot,
 } from '~/shared/logic/request-recorder'
+import { consola } from 'consola'
 import { onMessage } from 'webext-bridge/background'
 import { storage } from 'webextension-polyfill'
-import { REQUEST_RECORDER_BUNDLE_VERSION } from '~/shared/logic/request-recorder'
+import {
+  REQUEST_RECORDER_BUNDLE_VERSION,
+  REQUEST_RECORDER_STREAM_CHANNEL_PENDING,
+} from '~/shared/logic/request-recorder'
+import { publishRequestRecorderStreamEvent } from './request-recorder-stream'
 
 const REQUEST_RECORDER_PENDING_STORAGE_KEY = 'flow-dock.request-recorder.pending-bundles'
 
@@ -26,6 +31,23 @@ onMessage('request-recorder-save-pending', async (message) => {
 
   existingItems.unshift(nextItem)
   await writeStoredPendingBundles(existingItems)
+
+  try {
+    publishRequestRecorderStreamEvent({
+      channel: REQUEST_RECORDER_STREAM_CHANNEL_PENDING,
+      type: 'pending.saved',
+      payload: {
+        pendingId: nextItem._id,
+        sessionId: normalizeText(nextItem.bundle.session?._id) || undefined,
+        createdAt: nextItem.createdAt,
+        updatedAt: nextItem.updatedAt,
+      },
+      requireAck: true,
+    })
+  }
+  catch (error) {
+    consola.warn('[request-recorder-pending] publish pending.saved failed', error)
+  }
 
   return {
     item: nextItem,
@@ -65,6 +87,22 @@ onMessage('request-recorder-mark-pending-processed', async (message) => {
 
   items[targetIndex] = nextItem
   await writeStoredPendingBundles(items)
+
+  try {
+    publishRequestRecorderStreamEvent({
+      channel: REQUEST_RECORDER_STREAM_CHANNEL_PENDING,
+      type: 'pending.processed',
+      payload: {
+        pendingId: nextItem._id,
+        processedAt: nextItem.processedAt,
+        updatedAt: nextItem.updatedAt,
+      },
+      requireAck: true,
+    })
+  }
+  catch (error) {
+    consola.warn('[request-recorder-pending] publish pending.processed failed', error)
+  }
 
   return {
     item: nextItem,

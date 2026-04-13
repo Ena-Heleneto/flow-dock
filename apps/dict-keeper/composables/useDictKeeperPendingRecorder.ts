@@ -1,13 +1,22 @@
 import type {
   RequestRecorderBundle,
   RequestRecorderPendingBundle,
+  RequestRecorderStreamClientMessage,
+  RequestRecorderStreamEvent,
 } from '~/shared/logic/request-recorder'
 import { sendMessage } from 'webext-bridge/options'
+import browser from 'webextension-polyfill'
 import { request } from '~/shared/composables/useRouterRequest'
+import {
+  REQUEST_RECORDER_STREAM_CHANNEL_PENDING,
+  REQUEST_RECORDER_STREAM_PORT_NAME,
+} from '~/shared/logic/request-recorder'
 
 type NoticeTone = 'neutral' | 'success' | 'error'
 const REQUEST_TIMEOUT_MS = 15000
 const PENDING_AUTO_SYNC_INTERVAL_MS = 1200
+const STREAM_RECONNECT_DELAY_MS = 1500
+const STREAM_HEARTBEAT_INTERVAL_MS = 12000
 
 interface ImportExternalCrudRecordResponseData {
   sessionId: string
@@ -44,6 +53,14 @@ function createPendingRecorderStore() {
   const lastReceivedAt = ref<number>()
   let autoSyncTimer: ReturnType<typeof setInterval> | null = null
   let isAutoSyncRunning = false
+  let hasPendingForcedSync = false
+  let streamPort: browser.Runtime.Port | null = null
+  let streamPortCleanup: (() => void) | null = null
+  let streamReconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let streamHeartbeatTimer: ReturnType<typeof setInterval> | null = null
+  let isStreamClosedManually = false
+  const streamClientId = createRuntimeId('dict-keeper-stream-client')
+  const acknowledgedSeqByChannel = new Map<string, number>()
 
   const pendingCount = computed(() => pendingBundles.value.filter(item => item.status === 'pending').length)
 
@@ -171,8 +188,12 @@ function createPendingRecorderStore() {
   }
 
   async function runPendingAutoSyncTick(options: { forceNotice?: boolean } = {}) {
-    if (isAutoSyncRunning || isLoading.value || isProcessing.value)
+    if (isAutoSyncRunning || isLoading.value || isProcessing.value) {
+      if (options.forceNotice)
+        hasPendingForcedSync = true
+
       return []
+    }
 
     isAutoSyncRunning = true
 
@@ -197,10 +218,18 @@ function createPendingRecorderStore() {
     }
     finally {
       isAutoSyncRunning = false
+
+      if (hasPendingForcedSync) {
+        hasPendingForcedSync = false
+        void runPendingAutoSyncTick({ forceNotice: true })
+      }
     }
   }
 
   function startPendingAutoSync() {
+    isStreamClosedManually = false
+    connectRealtimeStreamPort()
+
     if (autoSyncTimer)
       return
 
@@ -212,11 +241,241 @@ function createPendingRecorderStore() {
   }
 
   function stopPendingAutoSync() {
+    isStreamClosedManually = true
+
+    closeRealtimeStreamPort()
+
+    if (streamReconnectTimer) {
+      clearTimeout(streamReconnectTimer)
+      streamReconnectTimer = null
+    }
+
+    if (streamHeartbeatTimer) {
+      clearInterval(streamHeartbeatTimer)
+      streamHeartbeatTimer = null
+    }
+
     if (!autoSyncTimer)
       return
 
     clearInterval(autoSyncTimer)
     autoSyncTimer = null
+  }
+
+  function connectRealtimeStreamPort() {
+    if (streamPort)
+      return
+
+    try {
+      const port = browser.runtime.connect({
+        name: REQUEST_RECORDER_STREAM_PORT_NAME,
+      })
+
+      const handleMessage = (message: unknown) => {
+        void handleRealtimeStreamMessage(message)
+      }
+
+      const handleDisconnect = () => {
+        if (streamPort !== port)
+          return
+
+        closeRealtimeStreamPort({ keepReconnectTimer: true })
+
+        if (!isStreamClosedManually)
+          scheduleRealtimeStreamReconnect()
+      }
+
+      streamPort = port
+      streamPortCleanup = () => {
+        port.onMessage.removeListener(handleMessage)
+        port.onDisconnect.removeListener(handleDisconnect)
+      }
+
+      port.onMessage.addListener(handleMessage)
+      port.onDisconnect.addListener(handleDisconnect)
+
+      sendRealtimeSubscribeMessage()
+      startRealtimeHeartbeat()
+    }
+    catch (error) {
+      setNotice(`实时通道连接失败：${toErrorMessage(error)}`, 'error')
+      scheduleRealtimeStreamReconnect()
+    }
+  }
+
+  async function handleRealtimeStreamMessage(message: unknown) {
+    if (!isRecord(message))
+      return
+
+    const type = normalizeText(message.type)
+
+    if (type === 'ready') {
+      sendRealtimeSubscribeMessage()
+      return
+    }
+
+    if (type === 'event') {
+      const event = normalizeRealtimeEvent(message.event)
+      if (!event)
+        return
+
+      acknowledgeRealtimeEvent(event)
+
+      if (event.channel !== REQUEST_RECORDER_STREAM_CHANNEL_PENDING)
+        return
+
+      if (event.type !== 'pending.saved' && event.type !== 'pending.processed')
+        return
+
+      const currentAckSeq = acknowledgedSeqByChannel.get(event.channel) ?? 0
+      if (event.seq > currentAckSeq)
+        acknowledgedSeqByChannel.set(event.channel, event.seq)
+
+      await runPendingAutoSyncTick({ forceNotice: true })
+      return
+    }
+
+    if (type === 'heartbeat')
+      return
+
+    if (type === 'error') {
+      const errorText = normalizeText(message.message)
+      if (errorText)
+        setNotice(`实时通道异常：${errorText}`, 'error')
+    }
+  }
+
+  function acknowledgeRealtimeEvent(event: RequestRecorderStreamEvent) {
+    const eventId = normalizeText(event.id)
+    if (!eventId)
+      return
+
+    const seq = normalizeCount(event.seq)
+
+    sendRealtimeMessage({
+      type: 'ack',
+      clientId: streamClientId,
+      eventId,
+      channel: event.channel,
+      seq,
+      receivedAt: Date.now(),
+    })
+  }
+
+  function sendRealtimeSubscribeMessage() {
+    sendRealtimeMessage({
+      type: 'subscribe',
+      clientId: streamClientId,
+      channels: [REQUEST_RECORDER_STREAM_CHANNEL_PENDING],
+      resumeFromSeq: buildRealtimeResumeFromSeq(),
+    })
+  }
+
+  function sendRealtimeMessage(message: RequestRecorderStreamClientMessage) {
+    if (!streamPort)
+      return
+
+    try {
+      streamPort.postMessage(message)
+    }
+    catch (error) {
+      setNotice(`实时通道发送失败：${toErrorMessage(error)}`, 'error')
+      scheduleRealtimeStreamReconnect()
+    }
+  }
+
+  function startRealtimeHeartbeat() {
+    if (streamHeartbeatTimer)
+      return
+
+    streamHeartbeatTimer = setInterval(() => {
+      sendRealtimeMessage({
+        type: 'heartbeat',
+        clientId: streamClientId,
+        ts: Date.now(),
+      })
+    }, STREAM_HEARTBEAT_INTERVAL_MS)
+  }
+
+  function scheduleRealtimeStreamReconnect() {
+    if (isStreamClosedManually)
+      return
+
+    if (!autoSyncTimer)
+      return
+
+    if (streamReconnectTimer)
+      return
+
+    streamReconnectTimer = setTimeout(() => {
+      streamReconnectTimer = null
+      connectRealtimeStreamPort()
+    }, STREAM_RECONNECT_DELAY_MS)
+  }
+
+  function closeRealtimeStreamPort(options: { keepReconnectTimer?: boolean } = {}) {
+    const activePort = streamPort
+    streamPort = null
+
+    if (streamPortCleanup) {
+      streamPortCleanup()
+      streamPortCleanup = null
+    }
+
+    if (activePort) {
+      try {
+        activePort.disconnect()
+      }
+      catch {
+        // noop
+      }
+    }
+
+    if (!options.keepReconnectTimer && streamReconnectTimer) {
+      clearTimeout(streamReconnectTimer)
+      streamReconnectTimer = null
+    }
+
+    if (streamHeartbeatTimer) {
+      clearInterval(streamHeartbeatTimer)
+      streamHeartbeatTimer = null
+    }
+  }
+
+  function buildRealtimeResumeFromSeq() {
+    const output: Record<string, number> = {}
+
+    for (const [channel, seq] of acknowledgedSeqByChannel.entries()) {
+      if (!channel || seq <= 0)
+        continue
+
+      output[channel] = seq
+    }
+
+    return output
+  }
+
+  function normalizeRealtimeEvent(input: unknown): RequestRecorderStreamEvent | null {
+    if (!isRecord(input))
+      return null
+
+    const id = normalizeText(input.id)
+    const channel = normalizeText(input.channel)
+    const type = normalizeText(input.type)
+    const seq = normalizeCount(input.seq)
+
+    if (!id || !channel || !type || seq <= 0)
+      return null
+
+    return {
+      id,
+      channel,
+      seq,
+      type,
+      ts: normalizeCount(input.ts) || Date.now(),
+      requireAck: input.requireAck !== false,
+      payload: input.payload,
+    } as RequestRecorderStreamEvent
   }
 
   function setNotice(text: string, tone: NoticeTone) {
@@ -348,6 +607,19 @@ function normalizeText(input: unknown) {
     return ''
 
   return input.trim()
+}
+
+function createRuntimeId(prefix: string) {
+  if (typeof globalThis.crypto?.randomUUID === 'function')
+    return `${prefix}:${globalThis.crypto.randomUUID()}`
+
+  return `${prefix}:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return Boolean(input)
+    && typeof input === 'object'
+    && !Array.isArray(input)
 }
 
 function toErrorMessage(error: unknown) {
