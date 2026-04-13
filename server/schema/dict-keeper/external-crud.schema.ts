@@ -1,12 +1,21 @@
 import { defineSchemaHandle } from '@/driver/define-schema-handle.driver'
 
 export const DICT_KEEPER_REQUEST_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+export const DICT_KEEPER_ENDPOINT_MERGE_STRATEGIES = ['auth-overrides', 'payload-overrides'] as const
 
 export type DictKeeperRequestMethod = (typeof DICT_KEEPER_REQUEST_METHODS)[number]
+export type DictKeeperEndpointMergeStrategy = (typeof DICT_KEEPER_ENDPOINT_MERGE_STRATEGIES)[number]
 
 export interface DictKeeperCrudEndpointNode extends Record<string, unknown> {
   path: string
   method: DictKeeperRequestMethod
+  pathTemplate?: string
+  queryTemplate?: Record<string, string>
+  headerTemplate?: Record<string, string>
+  bodyTemplate?: unknown
+  contentType?: string
+  timeoutMs?: number
+  mergeStrategy?: DictKeeperEndpointMergeStrategy
 }
 
 export interface DictKeeperCrudEndpointConfig extends Record<string, unknown> {
@@ -22,6 +31,7 @@ export interface DictKeeperExternalCrudDocument extends Record<string, unknown> 
   basePath: string
   dictionary: DictKeeperCrudEndpointConfig
   item: DictKeeperCrudEndpointConfig
+  isDefault?: boolean
   isDeleted?: boolean
   deletedAt?: number
   createdAt?: number
@@ -46,6 +56,7 @@ const dictKeeperExternalCrudSchema = defineSchemaHandle<DictKeeperExternalCrudDo
     { name: 'name', keyPath: 'name' },
     { name: 'updatedAt', keyPath: 'updatedAt' },
     { name: 'createdAt', keyPath: 'createdAt' },
+    { name: 'isDefault', keyPath: 'isDefault' },
     { name: 'isDeleted', keyPath: 'isDeleted' },
     { name: 'deletedAt', keyPath: 'deletedAt' },
   ],

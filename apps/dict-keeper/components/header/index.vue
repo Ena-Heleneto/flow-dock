@@ -2,6 +2,7 @@
 const emits = defineEmits<{
   setting: []
   preview: []
+  authConfig: []
 }>()
 </script>
 
@@ -38,6 +39,8 @@ const emits = defineEmits<{
     </div>
 
     <div text="4" h="6" i-game-icons:bolt-eye cursor="pointer" @click="emits('preview')" />
+
+    <div text="4" h="6" i-game-icons:keyring cursor="pointer" @click="emits('authConfig')" />
 
     <div text="4" h="6" i-game-icons:settings-knobs cursor="pointer" @click="emits('setting')" />
 

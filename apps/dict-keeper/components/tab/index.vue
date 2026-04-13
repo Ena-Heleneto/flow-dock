@@ -6,7 +6,7 @@ interface DictKeeperTabItem {
 }
 
 const { items = [] } = defineProps<{
-  items: DictKeeperTabItem[]
+  items?: DictKeeperTabItem[]
 }>()
 
 const activeKey = defineModel<string>('activeKey', { default: '' })

@@ -1,19 +1,102 @@
 <script lang="ts" setup>
+import type {
+  DictKeeperCrudEndpointNode,
+  DictKeeperCrudSection,
+} from './composables/useDictKeeperExternalCrud'
+
 import DictKeeperDrawer from './components/drawer/index.vue'
 import DictKeeperTab from './components/tab/index.vue'
-import { REQUEST_METHOD_OPTIONS, useDictKeeperExternalCrud } from './composables/useDictKeeperExternalCrud'
+import {
+  ENDPOINT_MERGE_STRATEGY_OPTIONS,
+  REQUEST_METHOD_OPTIONS,
+  useDictKeeperExternalCrud,
+} from './composables/useDictKeeperExternalCrud'
 
 type CrudTabKey = 'dictionary' | 'item'
+type EndpointActionKey = 'create' | 'read' | 'update' | 'delete'
+
+interface EndpointTemplateDraft {
+  queryTemplateText: string
+  headerTemplateText: string
+  bodyTemplateText: string
+}
+
+interface EndpointActionMeta {
+  key: EndpointActionKey
+  actionLabel: string
+  label: string
+  dictionaryPlaceholder: string
+  itemPlaceholder: string
+}
+
+interface EndpointEditRow {
+  section: DictKeeperCrudSection
+  key: EndpointActionKey
+  label: string
+  placeholder: string
+  node: DictKeeperCrudEndpointNode
+  draft: EndpointTemplateDraft
+}
 
 const CRUD_TAB_ITEMS: Array<{ key: CrudTabKey, label: string }> = [
   { key: 'dictionary', label: '数据字典 CRUD' },
   { key: 'item', label: '字典项 CRUD' },
 ]
 
+const ENDPOINT_ACTIONS: EndpointActionMeta[] = [
+  {
+    key: 'create',
+    actionLabel: '创建',
+    label: '创建接口（create）',
+    dictionaryPlaceholder: '/dictionary/create',
+    itemPlaceholder: '/dictionary-item/create',
+  },
+  {
+    key: 'read',
+    actionLabel: '读取',
+    label: '读取接口（read）',
+    dictionaryPlaceholder: '/dictionary/read',
+    itemPlaceholder: '/dictionary-item/read',
+  },
+  {
+    key: 'update',
+    actionLabel: '更新',
+    label: '更新接口（update）',
+    dictionaryPlaceholder: '/dictionary/update',
+    itemPlaceholder: '/dictionary-item/update',
+  },
+  {
+    key: 'delete',
+    actionLabel: '删除',
+    label: '删除接口（delete）',
+    dictionaryPlaceholder: '/dictionary/delete',
+    itemPlaceholder: '/dictionary-item/delete',
+  },
+]
+
+const SECTION_LABEL_MAP: Record<DictKeeperCrudSection, string> = {
+  dictionary: '字典',
+  item: '字典项',
+}
+
+const CONTENT_TYPE_OPTIONS = [
+  { label: '自动（有 body 时默认 JSON）', value: '' },
+  { label: 'application/json', value: 'application/json' },
+  { label: 'application/x-www-form-urlencoded', value: 'application/x-www-form-urlencoded' },
+  { label: 'text/plain', value: 'text/plain' },
+]
+
+const ENDPOINT_MERGE_STRATEGY_LABELS: Record<string, string> = {
+  'auth-overrides': 'auth-overrides（鉴权参数优先）',
+  'payload-overrides': 'payload-overrides（payload 参数优先）',
+}
+
 const DICTIONARY_ERROR_PATTERN = /^字典-(?:创建|读取|更新|删除)接口/
 const ITEM_ERROR_PATTERN = /^字典项-(?:创建|读取|更新|删除)接口/
 
 const drawerOpen = defineModel<boolean>('visible', { default: false })
+
+const externalCrudStore = useDictKeeperExternalCrud()
 
 const {
   form,
@@ -28,20 +111,69 @@ const {
   noticeText,
   noticeTone,
   validationErrors,
+} = externalCrudStore.state
+
+const {
+  initializeExternalCrud,
   refreshExternalCrudList,
-  loadExternalCrud,
   loadExternalCrudById,
   saveExternalCrud,
   createExternalCrudFromCurrent,
   deleteExternalCrud,
-} = useDictKeeperExternalCrud()
+  selectExternalCrudAsDefault,
+} = externalCrudStore.actions
 
 const pendingDeleteConfirmation = ref(false)
 const requestMethodOptions = REQUEST_METHOD_OPTIONS
 const crudTabItems = CRUD_TAB_ITEMS
+const endpointMergeStrategyOptions = ENDPOINT_MERGE_STRATEGY_OPTIONS
 const activeCrudTab = ref<CrudTabKey>('dictionary')
+const templateValidationErrors = ref<string[]>([])
 
-watch(validationErrors, (errors) => {
+const endpointTemplateDrafts = reactive<Record<DictKeeperCrudSection, Record<EndpointActionKey, EndpointTemplateDraft>>>(
+  createTemplateDraftGroups(),
+)
+
+const dictionaryEndpointRows = computed<EndpointEditRow[]>(() => {
+  return ENDPOINT_ACTIONS.map((meta) => {
+    return {
+      section: 'dictionary',
+      key: meta.key,
+      label: meta.label,
+      placeholder: meta.dictionaryPlaceholder,
+      node: form.dictionary[meta.key],
+      draft: endpointTemplateDrafts.dictionary[meta.key],
+    }
+  })
+})
+
+const itemEndpointRows = computed<EndpointEditRow[]>(() => {
+  return ENDPOINT_ACTIONS.map((meta) => {
+    return {
+      section: 'item',
+      key: meta.key,
+      label: meta.label,
+      placeholder: meta.itemPlaceholder,
+      node: form.item[meta.key],
+      draft: endpointTemplateDrafts.item[meta.key],
+    }
+  })
+})
+
+const endpointRowsByTab = computed(() => {
+  return activeCrudTab.value === 'dictionary'
+    ? dictionaryEndpointRows.value
+    : itemEndpointRows.value
+})
+
+const allValidationErrors = computed(() => {
+  if (templateValidationErrors.value.length === 0)
+    return validationErrors.value
+
+  return [...validationErrors.value, ...templateValidationErrors.value]
+})
+
+watch(allValidationErrors, (errors) => {
   const inferredTab = inferCrudTabFromErrors(errors)
   if (!inferredTab)
     return
@@ -68,16 +200,23 @@ const drawerOpenModel = computed({
 
 async function handleDrawerOpen() {
   pendingDeleteConfirmation.value = false
-  await loadExternalCrud()
+  await initializeExternalCrud()
+
+  syncTemplateDraftsFromForm()
+  clearTemplateValidationErrors()
 }
 
 function handleDrawerClose() {
   pendingDeleteConfirmation.value = false
+  clearTemplateValidationErrors()
 }
 
 async function handleReload() {
   pendingDeleteConfirmation.value = false
-  await loadExternalCrud()
+  await initializeExternalCrud()
+
+  syncTemplateDraftsFromForm()
+  clearTemplateValidationErrors()
 }
 
 async function handleRefreshList() {
@@ -87,7 +226,11 @@ async function handleRefreshList() {
 
 async function handleLoadSelected() {
   pendingDeleteConfirmation.value = false
-  await loadExternalCrudById(selectedExternalCrudId.value)
+  const loaded = await loadExternalCrudById(selectedExternalCrudId.value)
+  if (loaded)
+    syncTemplateDraftsFromForm()
+
+  clearTemplateValidationErrors()
 }
 
 async function handleSelectChange() {
@@ -96,17 +239,31 @@ async function handleSelectChange() {
   if (!selectedExternalCrudId.value)
     return
 
-  await loadExternalCrudById(selectedExternalCrudId.value)
+  const loaded = await selectExternalCrudAsDefault(selectedExternalCrudId.value)
+  if (loaded)
+    syncTemplateDraftsFromForm()
+
+  clearTemplateValidationErrors()
 }
 
 async function handleCreate() {
   pendingDeleteConfirmation.value = false
-  await createExternalCrudFromCurrent()
+  if (!applyTemplateDraftsToForm())
+    return
+
+  const created = await createExternalCrudFromCurrent()
+  if (created)
+    syncTemplateDraftsFromForm()
 }
 
 async function handleSave() {
   pendingDeleteConfirmation.value = false
-  await saveExternalCrud()
+  if (!applyTemplateDraftsToForm())
+    return
+
+  const saved = await saveExternalCrud()
+  if (saved)
+    syncTemplateDraftsFromForm()
 }
 
 async function handleDelete() {
@@ -120,6 +277,8 @@ async function handleDelete() {
 
   await deleteExternalCrud()
   pendingDeleteConfirmation.value = false
+  syncTemplateDraftsFromForm()
+  clearTemplateValidationErrors()
 }
 
 function formatTimestamp(value: number | undefined) {
@@ -142,6 +301,213 @@ function inferCrudTabFromErrors(errors: string[]) {
 function switchToCrudTab(tab: CrudTabKey) {
   activeCrudTab.value = tab
 }
+
+function createTemplateDraftGroups(): Record<DictKeeperCrudSection, Record<EndpointActionKey, EndpointTemplateDraft>> {
+  return {
+    dictionary: {
+      create: createTemplateDraft(),
+      read: createTemplateDraft(),
+      update: createTemplateDraft(),
+      delete: createTemplateDraft(),
+    },
+    item: {
+      create: createTemplateDraft(),
+      read: createTemplateDraft(),
+      update: createTemplateDraft(),
+      delete: createTemplateDraft(),
+    },
+  }
+}
+
+function createTemplateDraft(): EndpointTemplateDraft {
+  return {
+    queryTemplateText: '',
+    headerTemplateText: '',
+    bodyTemplateText: '',
+  }
+}
+
+function syncTemplateDraftsFromForm() {
+  const sections: DictKeeperCrudSection[] = ['dictionary', 'item']
+
+  for (const section of sections) {
+    for (const action of ENDPOINT_ACTIONS) {
+      const node = getEndpointNode(section, action.key)
+      const draft = endpointTemplateDrafts[section][action.key]
+
+      draft.queryTemplateText = stringifyJsonTemplate(node.queryTemplate)
+      draft.headerTemplateText = stringifyJsonTemplate(node.headerTemplate)
+      draft.bodyTemplateText = stringifyJsonTemplate(node.bodyTemplate)
+    }
+  }
+}
+
+function applyTemplateDraftsToForm() {
+  clearTemplateValidationErrors()
+
+  const nextErrors: string[] = []
+  const sections: DictKeeperCrudSection[] = ['dictionary', 'item']
+
+  for (const section of sections) {
+    for (const actionMeta of ENDPOINT_ACTIONS) {
+      const action = actionMeta.key
+      const node = getEndpointNode(section, action)
+      const draft = endpointTemplateDrafts[section][action]
+      const endpointLabel = `${SECTION_LABEL_MAP[section]}-${actionMeta.actionLabel}接口`
+
+      const parsedQueryTemplate = parseTemplateRecord(draft.queryTemplateText, `${endpointLabel} Query 模板`)
+      if (!parsedQueryTemplate.ok) {
+        nextErrors.push(parsedQueryTemplate.error)
+      }
+      else {
+        node.queryTemplate = parsedQueryTemplate.value
+      }
+
+      const parsedHeaderTemplate = parseTemplateRecord(draft.headerTemplateText, `${endpointLabel} Header 模板`)
+      if (!parsedHeaderTemplate.ok) {
+        nextErrors.push(parsedHeaderTemplate.error)
+      }
+      else {
+        node.headerTemplate = parsedHeaderTemplate.value
+      }
+
+      const parsedBodyTemplate = parseTemplateJson(draft.bodyTemplateText, `${endpointLabel} Body 模板`)
+      if (!parsedBodyTemplate.ok) {
+        nextErrors.push(parsedBodyTemplate.error)
+      }
+      else {
+        node.bodyTemplate = parsedBodyTemplate.value
+      }
+    }
+  }
+
+  templateValidationErrors.value = nextErrors
+  return nextErrors.length === 0
+}
+
+function parseTemplateRecord(
+  sourceText: string,
+  label: string,
+): { ok: true, value: Record<string, string> | undefined } | { ok: false, error: string } {
+  const normalized = sourceText.trim()
+  if (!normalized)
+    return { ok: true, value: undefined }
+
+  let parsedValue: unknown
+  try {
+    parsedValue = JSON.parse(normalized)
+  }
+  catch (error) {
+    return {
+      ok: false,
+      error: `${label} JSON 解析失败：${toErrorMessage(error)}`,
+    }
+  }
+
+  if (!parsedValue || typeof parsedValue !== 'object' || Array.isArray(parsedValue)) {
+    return {
+      ok: false,
+      error: `${label} 必须是 JSON 对象。`,
+    }
+  }
+
+  const source = parsedValue as Record<string, unknown>
+  const nextRecord: Record<string, string> = {}
+
+  for (const [rawKey, rawValue] of Object.entries(source)) {
+    const key = rawKey.trim()
+    if (!key)
+      continue
+
+    if (typeof rawValue !== 'string') {
+      return {
+        ok: false,
+        error: `${label} 的键 \`${key}\` 仅支持字符串值。`,
+      }
+    }
+
+    const value = rawValue.trim()
+    if (!value)
+      continue
+
+    nextRecord[key] = value
+  }
+
+  if (Object.keys(nextRecord).length === 0)
+    return { ok: true, value: undefined }
+
+  return { ok: true, value: nextRecord }
+}
+
+function parseTemplateJson(
+  sourceText: string,
+  label: string,
+): { ok: true, value: unknown } | { ok: false, error: string } {
+  const normalized = sourceText.trim()
+  if (!normalized)
+    return { ok: true, value: undefined }
+
+  try {
+    return {
+      ok: true,
+      value: JSON.parse(normalized),
+    }
+  }
+  catch (error) {
+    return {
+      ok: false,
+      error: `${label} JSON 解析失败：${toErrorMessage(error)}`,
+    }
+  }
+}
+
+function stringifyJsonTemplate(input: unknown) {
+  if (input === undefined)
+    return ''
+
+  try {
+    return JSON.stringify(input, null, 2)
+  }
+  catch {
+    return ''
+  }
+}
+
+function clearTemplateValidationErrors() {
+  templateValidationErrors.value = []
+}
+
+function getEndpointNode(section: DictKeeperCrudSection, action: EndpointActionKey) {
+  if (section === 'dictionary')
+    return form.dictionary[action]
+
+  return form.item[action]
+}
+
+function updateEndpointTimeout(node: DictKeeperCrudEndpointNode, event: Event) {
+  const target = event.target as HTMLInputElement
+  const value = target.value.trim()
+
+  if (!value) {
+    node.timeoutMs = undefined
+    return
+  }
+
+  const parsedValue = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    node.timeoutMs = undefined
+    return
+  }
+
+  node.timeoutMs = parsedValue
+}
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error)
+    return error.message
+
+  return '未知错误'
+}
 </script>
 
 <template>
@@ -155,7 +521,7 @@ function switchToCrudTab(tab: CrudTabKey) {
 
     <div flex="~ col" gap="5" @vue:mounted="handleDrawerOpen" @vue:unmounted="handleDrawerClose">
       <p text="xs #475569" leading="relaxed">
-        填写接口基础路径与 8 个 CRUD 接口（每个接口均需配置地址与请求方式）。保存策略：名称不变时更新当前已加载记录；若名称与已有记录同名则覆盖该同名记录；否则另存为新记录。删除为伪删除（isDeleted + deletedAt），删除后默认不在列表中显示。
+        填写接口基础路径与 8 个 CRUD 接口（每个接口均需配置地址与请求方式）。高级面板可为每个 endpoint 单独配置 path/query/header/body 模板、content-type、timeout 与参数合并策略。
       </p>
 
       <section class="dict-external-crud-section">
@@ -184,7 +550,7 @@ function switchToCrudTab(tab: CrudTabKey) {
                 :key="externalCrud._id"
                 :value="externalCrud._id"
               >
-                {{ externalCrud.name }} · {{ formatTimestamp(externalCrud.updatedAt) }}
+                {{ externalCrud.name }}{{ externalCrud.isDefault ? '（默认）' : '' }} · {{ formatTimestamp(externalCrud.updatedAt) }}
               </option>
             </select>
           </label>
@@ -231,7 +597,7 @@ function switchToCrudTab(tab: CrudTabKey) {
         已进入删除确认状态：再次点击「删除记录」将执行删除（伪删除）。
       </div>
 
-      <div v-if="validationErrors.length > 0" class="dict-external-crud-validation">
+      <div v-if="allValidationErrors.length > 0" class="dict-external-crud-validation">
         <div class="dict-external-crud-validation-header">
           <span>请先修正以下校验问题：</span>
 
@@ -255,7 +621,7 @@ function switchToCrudTab(tab: CrudTabKey) {
         </div>
 
         <ul class="dict-external-crud-validation-list">
-          <li v-for="error in validationErrors" :key="error">
+          <li v-for="error in allValidationErrors" :key="error">
             • {{ error }}
           </li>
         </ul>
@@ -313,149 +679,120 @@ function switchToCrudTab(tab: CrudTabKey) {
           >
             <template #default="{ activeKey }">
               <section
-                v-if="activeKey === 'dictionary'"
-                id="dict-tab-panel-dictionary"
+                :id="activeKey === 'dictionary' ? 'dict-tab-panel-dictionary' : 'dict-tab-panel-item'"
                 class="dict-external-crud-tab-panel"
                 role="tabpanel"
-                aria-labelledby="dict-tab-dictionary"
+                :aria-labelledby="activeKey === 'dictionary' ? 'dict-tab-dictionary' : 'dict-tab-item'"
               >
                 <h4 class="dict-external-crud-subtitle">
-                  数据字典 CRUD 接口
+                  {{ activeKey === 'dictionary' ? '数据字典 CRUD 接口' : '字典项 CRUD 接口' }}
                 </h4>
 
-                <div class="dict-external-crud-grid dict-external-crud-grid--single">
-                  <label class="dict-external-crud-field">
-                    <span>创建接口（create）</span>
-                    <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.dictionary.create.path" type="text" placeholder="/dictionary/create">
-                      <select v-model="form.dictionary.create.method">
-                        <option value="">
-                          请选择请求方式
-                        </option>
-                        <option v-for="method in requestMethodOptions" :key="`dictionary-create-${method}`" :value="method">
-                          {{ method }}
-                        </option>
-                      </select>
-                    </div>
-                  </label>
-
-                  <label class="dict-external-crud-field">
-                    <span>读取接口（read）</span>
-                    <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.dictionary.read.path" type="text" placeholder="/dictionary/read">
-                      <select v-model="form.dictionary.read.method">
-                        <option value="">
-                          请选择请求方式
-                        </option>
-                        <option v-for="method in requestMethodOptions" :key="`dictionary-read-${method}`" :value="method">
-                          {{ method }}
-                        </option>
-                      </select>
-                    </div>
-                  </label>
-
-                  <label class="dict-external-crud-field">
-                    <span>更新接口（update）</span>
-                    <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.dictionary.update.path" type="text" placeholder="/dictionary/update">
-                      <select v-model="form.dictionary.update.method">
-                        <option value="">
-                          请选择请求方式
-                        </option>
-                        <option v-for="method in requestMethodOptions" :key="`dictionary-update-${method}`" :value="method">
-                          {{ method }}
-                        </option>
-                      </select>
-                    </div>
-                  </label>
-
-                  <label class="dict-external-crud-field">
-                    <span>删除接口（delete）</span>
-                    <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.dictionary.delete.path" type="text" placeholder="/dictionary/delete">
-                      <select v-model="form.dictionary.delete.method">
-                        <option value="">
-                          请选择请求方式
-                        </option>
-                        <option v-for="method in requestMethodOptions" :key="`dictionary-delete-${method}`" :value="method">
-                          {{ method }}
-                        </option>
-                      </select>
-                    </div>
-                  </label>
-                </div>
-              </section>
-
-              <section
-                v-else
-                id="dict-tab-panel-item"
-                class="dict-external-crud-tab-panel"
-                role="tabpanel"
-                aria-labelledby="dict-tab-item"
-              >
-                <h4 class="dict-external-crud-subtitle">
-                  字典项 CRUD 接口
-                </h4>
+                <p class="dict-external-crud-template-tip">
+                  高级模板占位符支持：<code v-pre>{{payload.xxx}}</code>、<code v-pre>{{auth.xxx}}</code>、<code v-pre>{{context.xxx}}</code>
+                </p>
 
                 <div class="dict-external-crud-grid dict-external-crud-grid--single">
-                  <label class="dict-external-crud-field">
-                    <span>创建接口（create）</span>
+                  <label
+                    v-for="endpoint in endpointRowsByTab"
+                    :key="`${endpoint.section}-${endpoint.key}`"
+                    class="dict-external-crud-field"
+                  >
+                    <span>{{ endpoint.label }}</span>
                     <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.item.create.path" type="text" placeholder="/dictionary-item/create">
-                      <select v-model="form.item.create.method">
+                      <input v-model="endpoint.node.path" type="text" :placeholder="endpoint.placeholder">
+                      <select v-model="endpoint.node.method">
                         <option value="">
                           请选择请求方式
                         </option>
-                        <option v-for="method in requestMethodOptions" :key="`item-create-${method}`" :value="method">
+                        <option v-for="method in requestMethodOptions" :key="`${endpoint.section}-${endpoint.key}-${method}`" :value="method">
                           {{ method }}
                         </option>
                       </select>
                     </div>
-                  </label>
 
-                  <label class="dict-external-crud-field">
-                    <span>读取接口（read）</span>
-                    <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.item.read.path" type="text" placeholder="/dictionary-item/read">
-                      <select v-model="form.item.read.method">
-                        <option value="">
-                          请选择请求方式
-                        </option>
-                        <option v-for="method in requestMethodOptions" :key="`item-read-${method}`" :value="method">
-                          {{ method }}
-                        </option>
-                      </select>
-                    </div>
-                  </label>
+                    <details class="dict-external-crud-advanced-panel">
+                      <summary>高级参数模板配置</summary>
 
-                  <label class="dict-external-crud-field">
-                    <span>更新接口（update）</span>
-                    <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.item.update.path" type="text" placeholder="/dictionary-item/update">
-                      <select v-model="form.item.update.method">
-                        <option value="">
-                          请选择请求方式
-                        </option>
-                        <option v-for="method in requestMethodOptions" :key="`item-update-${method}`" :value="method">
-                          {{ method }}
-                        </option>
-                      </select>
-                    </div>
-                  </label>
+                      <div class="dict-external-crud-advanced-grid">
+                        <label class="dict-external-crud-field">
+                          <span>Path Template（可选）</span>
+                          <input
+                            v-model="endpoint.node.pathTemplate"
+                            type="text"
+                            placeholder="例如 /dict/{{payload.dictId}}/item"
+                          >
+                        </label>
 
-                  <label class="dict-external-crud-field">
-                    <span>删除接口（delete）</span>
-                    <div class="dict-external-crud-endpoint-control">
-                      <input v-model="form.item.delete.path" type="text" placeholder="/dictionary-item/delete">
-                      <select v-model="form.item.delete.method">
-                        <option value="">
-                          请选择请求方式
-                        </option>
-                        <option v-for="method in requestMethodOptions" :key="`item-delete-${method}`" :value="method">
-                          {{ method }}
-                        </option>
-                      </select>
-                    </div>
+                        <label class="dict-external-crud-field">
+                          <span>Content-Type（可选）</span>
+                          <select v-model="endpoint.node.contentType">
+                            <option
+                              v-for="option in CONTENT_TYPE_OPTIONS"
+                              :key="`${endpoint.section}-${endpoint.key}-content-type-${option.value || 'auto'}`"
+                              :value="option.value"
+                            >
+                              {{ option.label }}
+                            </option>
+                          </select>
+                        </label>
+
+                        <label class="dict-external-crud-field">
+                          <span>参数合并策略（可选）</span>
+                          <select v-model="endpoint.node.mergeStrategy">
+                            <option value="">
+                              默认（auth-overrides）
+                            </option>
+                            <option
+                              v-for="strategy in endpointMergeStrategyOptions"
+                              :key="`${endpoint.section}-${endpoint.key}-merge-${strategy}`"
+                              :value="strategy"
+                            >
+                              {{ ENDPOINT_MERGE_STRATEGY_LABELS[strategy] ?? strategy }}
+                            </option>
+                          </select>
+                        </label>
+
+                        <label class="dict-external-crud-field">
+                          <span>Timeout（毫秒，可选）</span>
+                          <input
+                            :value="endpoint.node.timeoutMs ?? ''"
+                            type="number"
+                            min="1"
+                            step="1"
+                            placeholder="例如 15000"
+                            @input="updateEndpointTimeout(endpoint.node, $event)"
+                          >
+                        </label>
+
+                        <label class="dict-external-crud-field dict-external-crud-field--full">
+                          <span>Query Template（JSON 对象）</span>
+                          <textarea
+                            v-model="endpoint.draft.queryTemplateText"
+                            rows="4"
+                            placeholder="例如：{&quot;dictId&quot;:&quot;{{payload.dictId}}&quot;}"
+                          />
+                        </label>
+
+                        <label class="dict-external-crud-field dict-external-crud-field--full">
+                          <span>Header Template（JSON 对象）</span>
+                          <textarea
+                            v-model="endpoint.draft.headerTemplateText"
+                            rows="4"
+                            placeholder="例如：{&quot;Authorization&quot;:&quot;Bearer {{auth.token}}&quot;}"
+                          />
+                        </label>
+
+                        <label class="dict-external-crud-field dict-external-crud-field--full">
+                          <span>Body Template（JSON）</span>
+                          <textarea
+                            v-model="endpoint.draft.bodyTemplateText"
+                            rows="6"
+                            placeholder="例如：{&quot;id&quot;:&quot;{{payload.id}}&quot;,&quot;operator&quot;:&quot;{{context.page}}&quot;}"
+                          />
+                        </label>
+                      </div>
+                    </details>
                   </label>
                 </div>
               </section>
@@ -554,6 +891,25 @@ function switchToCrudTab(tab: CrudTabKey) {
   color: rgb(15 23 42 / 0.86);
 }
 
+.dict-external-crud-template-tip {
+  margin: 0;
+  border: 1px dashed rgb(125 211 252 / 0.75);
+  border-radius: 0.65rem;
+  background: rgb(240 249 255 / 0.88);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgb(12 74 110 / 0.9);
+
+  code {
+    border-radius: 0.35rem;
+    background: rgb(226 232 240 / 0.75);
+    padding: 0.08rem 0.3rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.68rem;
+  }
+}
+
 .dict-external-crud-grid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -580,7 +936,7 @@ function switchToCrudTab(tab: CrudTabKey) {
     color: rgb(71 85 105 / 1);
   }
 
-  :is(input, select) {
+  :is(input, select, textarea) {
     width: 100%;
     border: 1px solid rgb(203 213 225 / 1);
     border-radius: 0.5rem;
@@ -593,9 +949,19 @@ function switchToCrudTab(tab: CrudTabKey) {
     transition: border-color 0.15s ease;
   }
 
-  :is(input, select):focus {
+  :is(input, select, textarea):focus {
     border-color: rgb(13 148 136 / 0.95);
   }
+
+  textarea {
+    resize: vertical;
+    min-height: 4.5rem;
+    line-height: 1.35rem;
+  }
+}
+
+.dict-external-crud-field--full {
+  grid-column: 1 / -1;
 }
 
 .dict-external-crud-endpoint-control {
@@ -650,6 +1016,34 @@ function switchToCrudTab(tab: CrudTabKey) {
 
 .dict-external-crud-link:hover {
   border-color: rgb(244 63 94 / 0.5);
+}
+
+.dict-external-crud-advanced-panel {
+  margin-top: 0.25rem;
+  border: 1px dashed rgb(148 163 184 / 0.6);
+  border-radius: 0.65rem;
+  background: rgb(248 250 252 / 0.72);
+  padding: 0.55rem 0.65rem;
+
+  summary {
+    cursor: pointer;
+    font-size: 0.72rem;
+    color: rgb(51 65 85 / 0.95);
+    user-select: none;
+  }
+}
+
+.dict-external-crud-advanced-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+@media (width >= 960px) {
+  .dict-external-crud-advanced-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .dict-external-crud-validation-list {

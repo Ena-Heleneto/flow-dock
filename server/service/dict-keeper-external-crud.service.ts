@@ -1,8 +1,14 @@
 import type { RouterRequestTransaction } from '@/runtime/types'
-import type { DictKeeperCrudEndpointConfig, DictKeeperCrudEndpointNode, DictKeeperExternalCrudDocument, DictKeeperRequestMethod } from '@/schema/dict-keeper/external-crud.schema'
+import type {
+  DictKeeperCrudEndpointConfig,
+  DictKeeperCrudEndpointNode,
+  DictKeeperEndpointMergeStrategy,
+  DictKeeperExternalCrudDocument,
+  DictKeeperRequestMethod,
+} from '@/schema/dict-keeper/external-crud.schema'
 import dictKeeperExternalCrudSchema, {
+  DICT_KEEPER_ENDPOINT_MERGE_STRATEGIES,
   DICT_KEEPER_REQUEST_METHODS,
-
 } from '@/schema/dict-keeper/external-crud.schema'
 
 export const DICT_KEEPER_GLOBAL_EXTERNAL_CRUD_ID = 'dict-keeper-global-external-crud'
@@ -13,6 +19,8 @@ type DictKeeperCrudAction = (typeof CRUD_ACTIONS)[number]
 type DictKeeperEndpointSection = 'dictionary' | 'item'
 
 const REQUEST_METHOD_SET = new Set<DictKeeperRequestMethod>(DICT_KEEPER_REQUEST_METHODS)
+const ENDPOINT_MERGE_STRATEGY_SET = new Set<DictKeeperEndpointMergeStrategy>(DICT_KEEPER_ENDPOINT_MERGE_STRATEGIES)
+const DEFAULT_LEGACY_ENDPOINT_METHOD: DictKeeperRequestMethod = 'GET'
 
 interface DictKeeperOperator {
   module: string
@@ -57,6 +65,11 @@ export interface DictKeeperExternalCrudUpdateInput extends DictKeeperExternalCru
 export interface DictKeeperExternalCrudDeleteInput {
   id?: string
   deletedBy: DictKeeperOperator
+}
+
+export interface DictKeeperExternalCrudSetDefaultInput {
+  id?: string
+  updatedBy: DictKeeperOperator
 }
 
 export async function createDictKeeperExternalCrud(
@@ -119,6 +132,7 @@ export async function createDictKeeperExternalCrud(
   return dictKeeperExternalCrudSchema.create({
     _id: id,
     ...normalized,
+    isDefault: false,
     isDeleted: false,
     deletedAt: undefined,
     createdBy: input.createdBy,
@@ -137,6 +151,10 @@ export async function readDictKeeperExternalCrud(
 
   if (requestedId)
     return getVisibleExternalCrudById(requestedId, includeDeleted, options)
+
+  const defaultRecord = await getDefaultExternalCrud(includeDeleted, options)
+  if (defaultRecord)
+    return defaultRecord
 
   const globalRecord = await getVisibleExternalCrudById(DICT_KEEPER_GLOBAL_EXTERNAL_CRUD_ID, includeDeleted, options)
   if (globalRecord)
@@ -207,9 +225,62 @@ export async function deleteDictKeeperExternalCrud(
     return null
 
   return dictKeeperExternalCrudSchema.updateById(id, {
+    isDefault: false,
     isDeleted: true,
     deletedAt: Date.now(),
     updatedBy: input.deletedBy,
+  }, { transaction: options.transaction })
+}
+
+export async function setDefaultDictKeeperExternalCrud(
+  input: DictKeeperExternalCrudSetDefaultInput,
+  options: DictKeeperExternalCrudServiceOptions = {},
+): Promise<DictKeeperExternalCrudDocument | null> {
+  await ensureNoLegacyExternalCrudRecords(options)
+
+  const id = normalizeText(input.id)
+  if (!id) {
+    throw Object.assign(new Error('External CRUD id is required for setting default'), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_ID_REQUIRED',
+    })
+  }
+
+  const target = await getRawExternalCrudById(id, options)
+  if (!target || isPseudoDeleted(target) || isLegacyExternalCrudDocument(target))
+    return null
+
+  const documents = await dictKeeperExternalCrudSchema.find(undefined, { transaction: options.transaction })
+
+  let defaultRecord: DictKeeperExternalCrudDocument | null = null
+
+  for (const document of documents) {
+    if (isLegacyExternalCrudDocument(document) || isPseudoDeleted(document))
+      continue
+
+    const shouldBeDefault = document._id === id
+    const alreadyDefault = document.isDefault === true
+    if (alreadyDefault === shouldBeDefault) {
+      if (shouldBeDefault)
+        defaultRecord = document
+
+      continue
+    }
+
+    const updated = await dictKeeperExternalCrudSchema.updateById(document._id, {
+      isDefault: shouldBeDefault,
+      updatedBy: input.updatedBy,
+    }, { transaction: options.transaction })
+
+    if (shouldBeDefault)
+      defaultRecord = updated
+  }
+
+  if (defaultRecord)
+    return defaultRecord
+
+  return dictKeeperExternalCrudSchema.updateById(id, {
+    isDefault: true,
+    updatedBy: input.updatedBy,
   }, { transaction: options.transaction })
 }
 
@@ -294,6 +365,25 @@ async function getVisibleExternalCrudById(
   return existing
 }
 
+async function getDefaultExternalCrud(
+  includeDeleted: boolean,
+  options: DictKeeperExternalCrudServiceOptions,
+) {
+  const documents = await dictKeeperExternalCrudSchema.find({ isDefault: true }, { transaction: options.transaction })
+
+  return documents
+    .filter((document) => {
+      if (isLegacyExternalCrudDocument(document))
+        return false
+
+      if (!includeDeleted && isPseudoDeleted(document))
+        return false
+
+      return true
+    })
+    .sort(compareByRecent)[0] ?? null
+}
+
 function normalizeEndpoints(
   patch: DictKeeperCrudEndpointPatch | undefined,
   fallback: DictKeeperCrudEndpointConfig | undefined,
@@ -323,6 +413,34 @@ function normalizeEndpointNode(
     ? normalizeRequestMethod(patchNode.method)
     : normalizeRequestMethod(fallback?.method)
 
+  const pathTemplate = patchNode?.pathTemplate !== undefined
+    ? normalizeOptionalText(patchNode.pathTemplate)
+    : normalizeOptionalText(fallback?.pathTemplate)
+
+  const queryTemplate = patchNode?.queryTemplate !== undefined
+    ? normalizeEndpointTemplateRecord(patchNode.queryTemplate, `${section}.${action}.queryTemplate`)
+    : normalizeEndpointTemplateRecord(fallback?.queryTemplate, `${section}.${action}.queryTemplate`)
+
+  const headerTemplate = patchNode?.headerTemplate !== undefined
+    ? normalizeEndpointTemplateRecord(patchNode.headerTemplate, `${section}.${action}.headerTemplate`)
+    : normalizeEndpointTemplateRecord(fallback?.headerTemplate, `${section}.${action}.headerTemplate`)
+
+  const bodyTemplate = patchNode?.bodyTemplate !== undefined
+    ? normalizeEndpointBodyTemplate(patchNode.bodyTemplate, `${section}.${action}.bodyTemplate`)
+    : normalizeEndpointBodyTemplate(fallback?.bodyTemplate, `${section}.${action}.bodyTemplate`)
+
+  const contentType = patchNode?.contentType !== undefined
+    ? normalizeOptionalText(patchNode.contentType)
+    : normalizeOptionalText(fallback?.contentType)
+
+  const timeoutMs = patchNode?.timeoutMs !== undefined
+    ? normalizeEndpointTimeout(patchNode.timeoutMs, `${section}.${action}.timeoutMs`)
+    : normalizeEndpointTimeout(fallback?.timeoutMs, `${section}.${action}.timeoutMs`)
+
+  const mergeStrategy = patchNode?.mergeStrategy !== undefined
+    ? normalizeEndpointMergeStrategy(patchNode.mergeStrategy, `${section}.${action}.mergeStrategy`)
+    : normalizeEndpointMergeStrategy(fallback?.mergeStrategy, `${section}.${action}.mergeStrategy`)
+
   if (!path) {
     throw Object.assign(new Error(`\`${section}.${action}.path\` is required`), {
       code: 'DICT_KEEPER_EXTERNAL_CRUD_ENDPOINT_PATH_REQUIRED',
@@ -344,10 +462,33 @@ function normalizeEndpointNode(
     })
   }
 
-  return {
+  const endpointNode: DictKeeperCrudEndpointNode = {
     path,
     method,
   }
+
+  if (pathTemplate)
+    endpointNode.pathTemplate = pathTemplate
+
+  if (queryTemplate)
+    endpointNode.queryTemplate = queryTemplate
+
+  if (headerTemplate)
+    endpointNode.headerTemplate = headerTemplate
+
+  if (bodyTemplate !== undefined)
+    endpointNode.bodyTemplate = bodyTemplate
+
+  if (contentType)
+    endpointNode.contentType = contentType
+
+  if (timeoutMs !== undefined)
+    endpointNode.timeoutMs = timeoutMs
+
+  if (mergeStrategy)
+    endpointNode.mergeStrategy = mergeStrategy
+
+  return endpointNode
 }
 
 function normalizeEndpointNodeInput(
@@ -365,6 +506,148 @@ function normalizeEndpointNodeInput(
   return input
 }
 
+function normalizeEndpointTemplateRecord(input: unknown, fieldPath: string) {
+  if (input === undefined || input === null)
+    return undefined
+
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    throw Object.assign(new Error(`\`${fieldPath}\` 必须是对象。`), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_TEMPLATE_RECORD_INVALID',
+      details: { fieldPath },
+    })
+  }
+
+  const source = input as Record<string, unknown>
+  const normalized: Record<string, string> = {}
+
+  for (const [rawKey, rawValue] of Object.entries(source)) {
+    const key = normalizeText(rawKey)
+    if (!key)
+      continue
+
+    if (typeof rawValue !== 'string') {
+      throw Object.assign(new Error(`\`${fieldPath}.${key}\` 必须是字符串模板。`), {
+        code: 'DICT_KEEPER_EXTERNAL_CRUD_TEMPLATE_VALUE_INVALID',
+        details: {
+          fieldPath,
+          key,
+          valueType: typeof rawValue,
+        },
+      })
+    }
+
+    const value = rawValue.trim()
+    if (!value)
+      continue
+
+    normalized[key] = value
+  }
+
+  if (Object.keys(normalized).length === 0)
+    return undefined
+
+  return normalized
+}
+
+function normalizeEndpointBodyTemplate(input: unknown, fieldPath: string): unknown {
+  if (input === undefined)
+    return undefined
+
+  return cloneBodyTemplateValue(input, fieldPath)
+}
+
+function cloneBodyTemplateValue(input: unknown, fieldPath: string): unknown {
+  if (input === null)
+    return null
+
+  if (typeof input === 'string' || typeof input === 'number' || typeof input === 'boolean')
+    return input
+
+  if (Array.isArray(input))
+    return input.map((item, index) => cloneBodyTemplateValue(item, `${fieldPath}[${index}]`))
+
+  if (typeof input === 'object') {
+    const source = input as Record<string, unknown>
+    const normalized: Record<string, unknown> = {}
+
+    for (const [rawKey, rawValue] of Object.entries(source)) {
+      const key = normalizeText(rawKey)
+      if (!key)
+        continue
+
+      normalized[key] = cloneBodyTemplateValue(rawValue, `${fieldPath}.${key}`)
+    }
+
+    return normalized
+  }
+
+  throw Object.assign(new Error(`\`${fieldPath}\` 包含不支持的模板值类型。`), {
+    code: 'DICT_KEEPER_EXTERNAL_CRUD_BODY_TEMPLATE_INVALID',
+    details: {
+      fieldPath,
+      valueType: typeof input,
+    },
+  })
+}
+
+function normalizeEndpointTimeout(input: unknown, fieldPath: string) {
+  if (input === undefined || input === null)
+    return undefined
+
+  if (typeof input !== 'number' || !Number.isFinite(input)) {
+    throw Object.assign(new Error(`\`${fieldPath}\` 必须是正整数。`), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_ENDPOINT_TIMEOUT_INVALID',
+      details: {
+        fieldPath,
+      },
+    })
+  }
+
+  const normalizedTimeout = Math.trunc(input)
+  if (normalizedTimeout <= 0) {
+    throw Object.assign(new Error(`\`${fieldPath}\` 必须大于 0。`), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_ENDPOINT_TIMEOUT_INVALID',
+      details: {
+        fieldPath,
+        timeout: input,
+      },
+    })
+  }
+
+  return normalizedTimeout
+}
+
+function normalizeEndpointMergeStrategy(input: unknown, fieldPath: string) {
+  if (input === undefined || input === null)
+    return undefined
+
+  if (typeof input !== 'string') {
+    throw Object.assign(new Error(`\`${fieldPath}\` 仅支持字符串。`), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_ENDPOINT_MERGE_STRATEGY_INVALID',
+      details: {
+        fieldPath,
+      },
+    })
+  }
+
+  const normalizedStrategy = normalizeText(input)
+  if (!normalizedStrategy)
+    return undefined
+
+  if (!ENDPOINT_MERGE_STRATEGY_SET.has(normalizedStrategy as DictKeeperEndpointMergeStrategy)) {
+    throw Object.assign(new Error(`\`${fieldPath}\` 不在允许范围内。`), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_ENDPOINT_MERGE_STRATEGY_INVALID',
+      details: {
+        fieldPath,
+        mergeStrategy: normalizedStrategy,
+        allowedStrategies: [...DICT_KEEPER_ENDPOINT_MERGE_STRATEGIES],
+      },
+    })
+  }
+
+  return normalizedStrategy as DictKeeperEndpointMergeStrategy
+}
+
 function normalizeRequestMethod(input: unknown): DictKeeperRequestMethod | null {
   if (typeof input !== 'string')
     return null
@@ -377,27 +660,117 @@ function normalizeRequestMethod(input: unknown): DictKeeperRequestMethod | null 
 }
 
 async function ensureNoLegacyExternalCrudRecords(options: DictKeeperExternalCrudServiceOptions = {}) {
-  const transaction = options.transaction
-
-  if (transaction && transaction.mode !== 'readwrite')
+  const legacyDocuments = await getLegacyExternalCrudDocuments(options)
+  if (legacyDocuments.length === 0)
     return
 
-  await purgeLegacyExternalCrudRecords(options)
+  const transaction = options.transaction
+
+  if (transaction && transaction.mode !== 'readwrite') {
+    throw Object.assign(new Error('检测到旧版外部 CRUD 配置，请先完成迁移后再读取。'), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_LEGACY_MIGRATION_REQUIRED',
+      details: {
+        ids: legacyDocuments.map(document => document._id),
+      },
+    })
+  }
+
+  await migrateLegacyExternalCrudRecords(legacyDocuments, options)
 }
 
-async function purgeLegacyExternalCrudRecords(options: DictKeeperExternalCrudServiceOptions) {
+async function getLegacyExternalCrudDocuments(options: DictKeeperExternalCrudServiceOptions) {
   const schemaOptions = options.transaction
     ? { transaction: options.transaction }
     : undefined
 
   const documents = await dictKeeperExternalCrudSchema.find(undefined, schemaOptions)
 
-  for (const document of documents) {
-    if (!isLegacyExternalCrudDocument(document))
-      continue
+  return documents.filter(isLegacyExternalCrudDocument)
+}
 
-    await dictKeeperExternalCrudSchema.deleteById(document._id, schemaOptions)
+async function migrateLegacyExternalCrudRecords(
+  legacyDocuments: DictKeeperExternalCrudDocument[],
+  options: DictKeeperExternalCrudServiceOptions,
+) {
+  const schemaOptions = options.transaction
+    ? { transaction: options.transaction }
+    : undefined
+
+  for (const document of legacyDocuments) {
+    const normalized = normalizeLegacyExternalCrudDocument(document)
+
+    const updated = await dictKeeperExternalCrudSchema.updateById(document._id, {
+      ...normalized,
+    }, schemaOptions)
+
+    if (!updated) {
+      throw Object.assign(new Error('外部 CRUD 旧版配置迁移失败。'), {
+        code: 'DICT_KEEPER_EXTERNAL_CRUD_LEGACY_MIGRATION_FAILED',
+        details: {
+          id: document._id,
+        },
+      })
+    }
   }
+}
+
+function normalizeLegacyExternalCrudDocument(document: DictKeeperExternalCrudDocument) {
+  const normalizedId = resolveExternalCrudId(document._id)
+
+  return normalizeExternalCrudPatch(
+    {
+      name: document.name,
+      basePath: document.basePath,
+      dictionary: normalizeLegacyEndpointPatch(document.dictionary),
+      item: normalizeLegacyEndpointPatch(document.item),
+    },
+    undefined,
+    normalizedId,
+  )
+}
+
+function normalizeLegacyEndpointPatch(config: unknown): DictKeeperCrudEndpointPatch {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw Object.assign(new Error('旧版 endpoint 配置格式无效，无法自动迁移。'), {
+      code: 'DICT_KEEPER_EXTERNAL_CRUD_LEGACY_ENDPOINT_INVALID',
+    })
+  }
+
+  const source = config as Record<string, unknown>
+
+  return {
+    create: normalizeLegacyEndpointNodeInput(source.create),
+    read: normalizeLegacyEndpointNodeInput(source.read),
+    update: normalizeLegacyEndpointNodeInput(source.update),
+    delete: normalizeLegacyEndpointNodeInput(source.delete),
+  }
+}
+
+function normalizeLegacyEndpointNodeInput(input: unknown): DictKeeperCrudEndpointNodePatch {
+  if (typeof input === 'string') {
+    return {
+      path: input,
+      method: DEFAULT_LEGACY_ENDPOINT_METHOD,
+    }
+  }
+
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    return {}
+
+  const source = input as Record<string, unknown>
+  const normalizedPath = normalizeText(source.path)
+  const normalizedMethod = normalizeRequestMethod(source.method)
+
+  const patch: DictKeeperCrudEndpointNodePatch = {
+    ...source,
+  }
+
+  if (normalizedPath)
+    patch.path = normalizedPath
+
+  patch.method = normalizedMethod ?? DEFAULT_LEGACY_ENDPOINT_METHOD
+
+  return patch
 }
 
 function isLegacyExternalCrudDocument(document: DictKeeperExternalCrudDocument) {
@@ -421,11 +794,22 @@ function isLegacyEndpointConfig(config: unknown) {
       return true
 
     const normalizedNode = endpointNode as Record<string, unknown>
-    if (typeof normalizedNode.path !== 'string' || typeof normalizedNode.method !== 'string')
+    const path = normalizeText(normalizedNode.path)
+    const method = normalizeRequestMethod(normalizedNode.method)
+
+    if (!path || !method)
       return true
   }
 
   return false
+}
+
+function normalizeOptionalText(input: unknown) {
+  const normalized = normalizeText(input)
+  if (!normalized)
+    return undefined
+
+  return normalized
 }
 
 function normalizeText(input: unknown) {
@@ -473,6 +857,7 @@ export default {
   createDictKeeperExternalCrud,
   listDictKeeperExternalCruds,
   readDictKeeperExternalCrud,
+  setDefaultDictKeeperExternalCrud,
   updateDictKeeperExternalCrud,
   deleteDictKeeperExternalCrud,
 }

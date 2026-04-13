@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-const { deleteCount = 0 } = defineProps<{ deleteCount: number }>()
+const { deleteCount = 0 } = defineProps<{ deleteCount?: number }>()
 
 const showDeleteCount = computed(() => deleteCount > 0)
 </script>
