@@ -1,13 +1,17 @@
-import type { DictKeeperCrudEndpointConfig } from '@/schema/dict-keeper/external-crud.schema'
+import type { DictKeeperCrudEndpointNode } from '@/schema/dict-keeper/external-crud.schema'
 import { defineRouterHandle } from '@/driver/define-router-handle.driver'
 import { updateDictKeeperExternalCrud } from '@/service/dict-keeper-external-crud.service'
+
+type DictKeeperCrudAction = 'create' | 'read' | 'update' | 'delete'
+
+type DictKeeperCrudEndpointPatch = Partial<Record<DictKeeperCrudAction, Partial<DictKeeperCrudEndpointNode> | string>>
 
 interface UpdateBody {
   id?: string
   name?: string
   basePath?: string
-  dictionary?: Partial<DictKeeperCrudEndpointConfig>
-  item?: Partial<DictKeeperCrudEndpointConfig>
+  dictionary?: DictKeeperCrudEndpointPatch
+  item?: DictKeeperCrudEndpointPatch
 }
 
 export default defineRouterHandle<UpdateBody>(async (event) => {

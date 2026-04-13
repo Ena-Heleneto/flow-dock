@@ -2,11 +2,23 @@ import { request } from '~/shared/composables/useRouterRequest'
 
 type NoticeTone = 'neutral' | 'success' | 'error'
 
+export const REQUEST_METHOD_OPTIONS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+
+export type DictKeeperRequestMethod = (typeof REQUEST_METHOD_OPTIONS)[number]
+export type DictKeeperRequestMethodInput = DictKeeperRequestMethod | ''
+
+const REQUEST_METHOD_SET = new Set<DictKeeperRequestMethod>(REQUEST_METHOD_OPTIONS)
+
+export interface DictKeeperCrudEndpointNode {
+  path: string
+  method: DictKeeperRequestMethodInput
+}
+
 export interface DictKeeperCrudEndpointConfig {
-  create: string
-  read: string
-  update: string
-  delete: string
+  create: DictKeeperCrudEndpointNode
+  read: DictKeeperCrudEndpointNode
+  update: DictKeeperCrudEndpointNode
+  delete: DictKeeperCrudEndpointNode
 }
 
 export interface DictKeeperExternalCrudForm {
@@ -365,14 +377,8 @@ export function useDictKeeperExternalCrud() {
     const defaults = createDefaultForm()
 
     form.basePath = defaults.basePath
-    form.dictionary.create = defaults.dictionary.create
-    form.dictionary.read = defaults.dictionary.read
-    form.dictionary.update = defaults.dictionary.update
-    form.dictionary.delete = defaults.dictionary.delete
-    form.item.create = defaults.item.create
-    form.item.read = defaults.item.read
-    form.item.update = defaults.item.update
-    form.item.delete = defaults.item.delete
+    assignEndpointConfig(form.dictionary, defaults.dictionary)
+    assignEndpointConfig(form.item, defaults.item)
   }
 
   const isBusy = computed(() => {
@@ -406,39 +412,29 @@ export function useDictKeeperExternalCrud() {
   function applyRecord(record: DictKeeperExternalCrudRecord) {
     form.basePath = normalizeText(record.basePath)
 
-    form.dictionary.create = normalizeText(record.dictionary?.create)
-    form.dictionary.read = normalizeText(record.dictionary?.read)
-    form.dictionary.update = normalizeText(record.dictionary?.update)
-    form.dictionary.delete = normalizeText(record.dictionary?.delete)
-
-    form.item.create = normalizeText(record.item?.create)
-    form.item.read = normalizeText(record.item?.read)
-    form.item.update = normalizeText(record.item?.update)
-    form.item.delete = normalizeText(record.item?.delete)
+    assignEndpointConfig(form.dictionary, normalizeEndpointConfig(record.dictionary))
+    assignEndpointConfig(form.item, normalizeEndpointConfig(record.item))
   }
 
   function buildNormalizedFormPayload(): DictKeeperExternalCrudForm {
     return {
       basePath: normalizeText(form.basePath),
-      dictionary: {
-        create: normalizeText(form.dictionary.create),
-        read: normalizeText(form.dictionary.read),
-        update: normalizeText(form.dictionary.update),
-        delete: normalizeText(form.dictionary.delete),
-      },
-      item: {
-        create: normalizeText(form.item.create),
-        read: normalizeText(form.item.read),
-        update: normalizeText(form.item.update),
-        delete: normalizeText(form.item.delete),
-      },
+      dictionary: normalizeEndpointConfig(form.dictionary),
+      item: normalizeEndpointConfig(form.item),
     }
   }
 
   function validateForm() {
-    const entries: Array<{ label: string, value: string }> = [
-      { label: '外部 CRUD 名称', value: externalCrudNameInput.value },
-      { label: '接口基础路径', value: form.basePath },
+    const errors: string[] = []
+    const allowedMethodsLabel = REQUEST_METHOD_OPTIONS.join(' / ')
+
+    if (normalizeText(externalCrudNameInput.value).length === 0)
+      errors.push('外部 CRUD 名称不能为空')
+
+    if (normalizeText(form.basePath).length === 0)
+      errors.push('接口基础路径不能为空')
+
+    const endpointEntries: Array<{ label: string, value: DictKeeperCrudEndpointNode }> = [
       { label: '字典-创建接口', value: form.dictionary.create },
       { label: '字典-读取接口', value: form.dictionary.read },
       { label: '字典-更新接口', value: form.dictionary.update },
@@ -449,9 +445,19 @@ export function useDictKeeperExternalCrud() {
       { label: '字典项-删除接口', value: form.item.delete },
     ]
 
-    const errors = entries
-      .filter(entry => normalizeText(entry.value).length === 0)
-      .map(entry => `${entry.label}不能为空`)
+    for (const entry of endpointEntries) {
+      if (normalizeText(entry.value.path).length === 0)
+        errors.push(`${entry.label}路径不能为空`)
+
+      const rawMethod = normalizeText(entry.value.method)
+      if (!rawMethod) {
+        errors.push(`${entry.label}请求方式不能为空`)
+        continue
+      }
+
+      if (!REQUEST_METHOD_SET.has(rawMethod as DictKeeperRequestMethod))
+        errors.push(`${entry.label}请求方式无效，仅支持：${allowedMethodsLabel}`)
+    }
 
     validationErrors.value = errors
     return errors.length === 0
@@ -526,19 +532,87 @@ function withTimeout<TData>(promise: Promise<TData>, timeoutMs: number, message:
 function createDefaultForm(): DictKeeperExternalCrudForm {
   return {
     basePath: '',
-    dictionary: {
-      create: '',
-      read: '',
-      update: '',
-      delete: '',
-    },
-    item: {
-      create: '',
-      read: '',
-      update: '',
-      delete: '',
-    },
+    dictionary: createDefaultEndpointConfig(),
+    item: createDefaultEndpointConfig(),
   }
+}
+
+function createDefaultEndpointConfig(): DictKeeperCrudEndpointConfig {
+  return {
+    create: createDefaultEndpointNode(),
+    read: createDefaultEndpointNode(),
+    update: createDefaultEndpointNode(),
+    delete: createDefaultEndpointNode(),
+  }
+}
+
+function createDefaultEndpointNode(): DictKeeperCrudEndpointNode {
+  return {
+    path: '',
+    method: '',
+  }
+}
+
+function normalizeEndpointConfig(input: unknown): DictKeeperCrudEndpointConfig {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    return createDefaultEndpointConfig()
+
+  const source = input as Record<string, unknown>
+
+  return {
+    create: normalizeEndpointNode(source.create),
+    read: normalizeEndpointNode(source.read),
+    update: normalizeEndpointNode(source.update),
+    delete: normalizeEndpointNode(source.delete),
+  }
+}
+
+function normalizeEndpointNode(input: unknown): DictKeeperCrudEndpointNode {
+  if (typeof input === 'string') {
+    return {
+      path: normalizeText(input),
+      method: '',
+    }
+  }
+
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    return createDefaultEndpointNode()
+
+  const source = input as Record<string, unknown>
+
+  return {
+    path: normalizeText(source.path),
+    method: normalizeRequestMethodInput(source.method),
+  }
+}
+
+function normalizeRequestMethodInput(input: unknown): DictKeeperRequestMethodInput {
+  if (typeof input !== 'string')
+    return ''
+
+  const normalized = input.trim().toUpperCase()
+  if (!REQUEST_METHOD_SET.has(normalized as DictKeeperRequestMethod))
+    return ''
+
+  return normalized as DictKeeperRequestMethod
+}
+
+function assignEndpointConfig(
+  target: DictKeeperCrudEndpointConfig,
+  source: DictKeeperCrudEndpointConfig,
+) {
+  assignEndpointNode(target.create, source.create)
+  assignEndpointNode(target.read, source.read)
+  assignEndpointNode(target.update, source.update)
+  assignEndpointNode(target.delete, source.delete)
+}
+
+function assignEndpointNode(
+  target: DictKeeperCrudEndpointNode,
+  source: DictKeeperCrudEndpointNode,
+) {
+  target.path = source.path
+  target.method = source.method
 }
 
 function normalizeText(input: unknown) {

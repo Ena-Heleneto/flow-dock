@@ -1,10 +1,19 @@
 import { defineSchemaHandle } from '@/driver/define-schema-handle.driver'
 
+export const DICT_KEEPER_REQUEST_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+
+export type DictKeeperRequestMethod = (typeof DICT_KEEPER_REQUEST_METHODS)[number]
+
+export interface DictKeeperCrudEndpointNode extends Record<string, unknown> {
+  path: string
+  method: DictKeeperRequestMethod
+}
+
 export interface DictKeeperCrudEndpointConfig extends Record<string, unknown> {
-  create: string
-  read: string
-  update: string
-  delete: string
+  create: DictKeeperCrudEndpointNode
+  read: DictKeeperCrudEndpointNode
+  update: DictKeeperCrudEndpointNode
+  delete: DictKeeperCrudEndpointNode
 }
 
 export interface DictKeeperExternalCrudDocument extends Record<string, unknown> {
