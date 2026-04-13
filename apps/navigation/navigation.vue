@@ -1,80 +1,16 @@
-<script setup lang="ts">
-async function openExtensionPage(path: string) {
-  const url = browser.runtime.getURL(path)
-  const chromeTabs = (globalThis as any).chrome?.tabs
-
-  try {
-    await browser.tabs.create({ url })
-  }
-  catch {
-    if (chromeTabs?.create)
-      chromeTabs.create({ url })
-    else
-      await browser.tabs.create({ url })
-  }
-}
-
-/**
- * 打开扩展的选项页面。
- * 首先尝试使用 `browser.runtime.openOptionsPage()` 方法，
- * 如果失败，则兼容 Chrome 扩展的 `chrome.runtime.openOptionsPage()` 方法。
- * 如果仍然无法打开，则回退到打开指定的扩展页面（如数据库页面）。
- *
- * @async
- * @returns {Promise<void>} 无返回值，异步执行打开页面操作。
- */
-// async function openOptionsPage() {
-//   try {
-//     await browser.runtime.openOptionsPage()
-//   }
-//   catch {
-//     const chromeRuntime = (globalThis as any).chrome?.runtime
-//     const chromeTabs = (globalThis as any).chrome?.tabs
-//     const optionsUrl = browser.runtime.getURL('dist/database/index.html')
-
-//     if (chromeRuntime?.openOptionsPage)
-//       chromeRuntime.openOptionsPage()
-//     else if (chromeTabs?.create)
-//       chromeTabs.create({ url: optionsUrl })
-//     else
-//       await browser.tabs.create({ url: optionsUrl })
-//   }
-// }
-
-async function openGlobalSettingsPage() {
-  await openExtensionPage('dist/options/index.html')
-}
-
-async function openImportPipelinePage() {
-  await openExtensionPage('import-pipeline/index.html')
-}
-
-async function openDictKeeperPage() {
-  await openExtensionPage('dict-keeper/index.html')
-}
-
-async function handleOpenDatabaseManagerPage() {
-  await openExtensionPage('database-manager/index.html')
-}
-</script>
-
 <template>
-  <main class="w-full px-4 py-5 text-center text-gray-700">
-    <!-- <Logo /> -->
-
-    <div flex="~ col">
-      <button class="btn mt-2" @click="openGlobalSettingsPage">
-        全局设置
-      </button>
-      <button class="btn mt-2" @click="handleOpenDatabaseManagerPage">
-        数据库查看器
-      </button>
-      <button class="btn mt-2" @click="openImportPipelinePage">
-        数据导入流水线
-      </button>
-      <button class="btn mt-2" @click="openDictKeeperPage">
-        数据字典管理器
-      </button>
+  <main class="w-full px-4 py-5 text-gray-700">
+    <h1 class="text-lg font-semibold mb-3">
+      Flow Dock Template
+    </h1>
+    <p class="text-sm leading-6 mb-3">
+      当前分支仅保留扩展基础架构：模块发现、构建系统、background/content/page 运行时。
+    </p>
+    <p class="text-sm leading-6">
+      你可以在 <code>apps/</code> 下新增业务模块，并通过 <code>module.config.json</code> 自动参与构建。
+    </p>
+    <div class="mt-4 text-xs opacity-75">
+      Infra only · Ready for scaffolding
     </div>
   </main>
 </template>

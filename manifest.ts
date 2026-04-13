@@ -21,7 +21,7 @@ function isFirefox() {
   return process.env.EXTENSION === 'firefox'
 }
 
-function resolveSidePanelPage(): SidePanelPageMeta {
+function resolveSidePanelPage(): SidePanelPageMeta | undefined {
   const pageModules = discoverModules({ appsRoot: r('apps') })
     .filter(item => item.kind === 'page')
 
@@ -34,7 +34,7 @@ function resolveSidePanelPage(): SidePanelPageMeta {
     }
   }
 
-  throw new Error('[manifest] unable to resolve side panel page from apps/*/module.config.json')
+  return undefined
 }
 
 export async function getManifest() {
@@ -78,13 +78,13 @@ export async function getManifest() {
     },
   }
 
-  if (firefox) {
+  if (firefox && sidePanelPage) {
     manifest.sidebar_action = {
       default_title: sidePanelPage.title ?? extensionTitle,
       default_panel: sidePanelPage.panelPath,
     }
   }
-  else {
+  else if (sidePanelPage) {
     (manifest as Manifest.WebExtensionManifest & {
       side_panel?: { default_path: string }
     }).side_panel = {

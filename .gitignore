@@ -15,5 +15,7 @@ apps/auto-imports.d.ts
 apps/components.d.ts
 .eslintcache
 dist
+playwright-report
+test-results
 pnpm-lock.yaml
 .pnpm-store

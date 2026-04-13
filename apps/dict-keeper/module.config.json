@@ -1,6 +1,0 @@
-{
-  "id": "dict-keeper",
-  "kind": "page",
-  "enabled": true,
-  "page": { "entry": "index.html", "outDir": "dict-keeper" }
-}

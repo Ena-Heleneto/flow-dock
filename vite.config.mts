@@ -10,6 +10,7 @@ import IconsResolver from 'unplugin-icons/resolver'
 import Icons from 'unplugin-icons/vite'
 import Components from 'unplugin-vue-components/vite'
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import packageJson from './package.json'
 import { discoverModules } from './scripts/module-registry'
 
@@ -45,7 +46,13 @@ function resolvePageName() {
   if (buildTarget === 'navigation')
     return 'navigation'
 
-  return 'navigation'
+  const preferredNavigationModule = discoveredModules
+    .find(item => item.kind === 'page' && (item.dirName === 'navigation' || item.id === 'navigation'))
+
+  if (preferredNavigationModule)
+    return preferredNavigationModule.dirName
+
+  return discoveredModules.find(item => item.kind === 'page')?.dirName
 }
 
 function resolveModuleByKind(kind: 'background' | 'content') {
@@ -56,10 +63,13 @@ function resolveModuleByKind(kind: 'background' | 'content') {
   return module
 }
 
-function resolvePageModule(name: string) {
-  const module = discoveredModules.find(item => item.kind === 'page' && (item.dirName === name || item.id === name))
+function resolvePageModule(name: string | undefined) {
+  const module = name
+    ? discoveredModules.find(item => item.kind === 'page' && (item.dirName === name || item.id === name))
+    : discoveredModules.find(item => item.kind === 'page')
+
   if (!module)
-    throw new Error(`[vite] missing page module: ${name}`)
+    throw new Error(`[vite] missing page module${name ? `: ${name}` : ''}`)
 
   return module
 }
@@ -82,7 +92,7 @@ function resolveContentBuildMeta() {
   }
 }
 
-function resolvePageBuildMeta(name: string) {
+function resolvePageBuildMeta(name: string | undefined) {
   const module = resolvePageModule(name)
   const rootDir = r('apps', module.dirName)
 
@@ -261,6 +271,10 @@ export default defineConfig(({ command }) => {
       origin: `http://localhost:${port}`,
     },
     build: resolveBuildConfig(target),
-    test: { globals: true, environment: 'jsdom' },
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      exclude: [...configDefaults.exclude, 'e2e/**', 'playwright-report/**', 'test-results/**'],
+    },
   }
 })

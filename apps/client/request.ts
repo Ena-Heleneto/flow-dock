@@ -10,6 +10,7 @@ const QUERY_AND_HASH_SUFFIX_RE = /[#?].*$/
 const WINDOWS_PATH_SEPARATOR_RE = /\\+/g
 const TRAILING_SLASH_RE = /\/+$/
 const HTML_FILE_SUFFIX_RE = /\.html$/i
+const ROUTER_UNAVAILABLE_ERROR_CODE = 'ROUTER_UNAVAILABLE'
 
 export interface RouterRequestOptions<
   TBody = unknown,
@@ -40,8 +41,24 @@ export async function request<
     },
   }
 
-  const response = await sendMessage('router-request', payload)
-  return response as RouterResponse<TData>
+  try {
+    const response = await sendMessage('router-request', payload)
+    if (isRouterResponse(response))
+      return response as RouterResponse<TData>
+
+    return buildUnavailableResponse<TData>({
+      message: 'Router response is unavailable',
+    })
+  }
+  catch (error) {
+    return buildUnavailableResponse<TData>({
+      message: toErrorMessage(error),
+      details: {
+        path: payload.path,
+        method: payload.method,
+      },
+    })
+  }
 }
 
 export async function requestOrThrow<
@@ -111,4 +128,43 @@ function buildDefaultMeta(): RouterRequestMeta {
     module: inferredModule,
     page: inferredPage,
   }
+}
+
+function isRouterResponse(input: unknown): input is RouterResponse {
+  if (!input || typeof input !== 'object')
+    return false
+
+  return typeof (input as { ok?: unknown }).ok === 'boolean'
+}
+
+function buildUnavailableResponse<TData>(options: { message: string, details?: unknown }): RouterResponse<TData> {
+  const requestId = createRuntimeId('router-request')
+
+  return {
+    ok: false,
+    error: {
+      message: options.message,
+      code: ROUTER_UNAVAILABLE_ERROR_CODE,
+      details: options.details,
+    },
+    requestId,
+    traceId: requestId,
+  }
+}
+
+function createRuntimeId(prefix: string) {
+  if (typeof globalThis.crypto?.randomUUID === 'function')
+    return `${prefix}:${globalThis.crypto.randomUUID()}`
+
+  return `${prefix}:${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error)
+    return error.message
+
+  if (typeof error === 'string')
+    return error
+
+  return 'Router request failed: unknown error'
 }

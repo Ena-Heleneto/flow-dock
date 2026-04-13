@@ -14,7 +14,7 @@
     "start:firefox": "./.bin/start.sh firefox",
     "clear": "./.bin/clear.sh",
     "lint": "eslint --cache .",
-    "test": "vitest test",
+    "test": "vitest run",
     "test:e2e": "playwright test",
     "postinstall": "simple-git-hooks",
     "typecheck": "tsc --noEmit"
