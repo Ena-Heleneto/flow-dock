@@ -19,3 +19,9 @@ playwright-report
 test-results
 pnpm-lock.yaml
 .pnpm-store
+
+auto-imports.d.ts
+components.d.ts
+
+fonts
+.vite-inspect

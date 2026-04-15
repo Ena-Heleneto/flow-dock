@@ -1,6 +1,0 @@
-{
-  "id": "background",
-  "kind": "background",
-  "enabled": true,
-  "background": { "entry": "main.ts", "outDir": "background" }
-}

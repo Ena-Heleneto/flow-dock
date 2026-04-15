@@ -10,7 +10,9 @@
     "moduleResolution": "bundler",
     "paths": {
       "~/*": ["apps/*"],
-      "@/*": ["server/*"]
+      "#/*": ["server/*"],
+      "$/*": ["packages/*"],
+      "/*": ["./*"]
     },
     "resolveJsonModule": true,
     "types": [

@@ -1,7 +1,0 @@
-{
-  "id": "navigation",
-  "kind": "page",
-  "enabled": true,
-  "manifest": { "sidePanelDefault": true, "sidebarTitle": "Navigation" },
-  "page": { "entry": "index.html", "outDir": "navigation" }
-}
