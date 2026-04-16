@@ -2,22 +2,31 @@
 // export { ensureFlowDockDir } from './src'
 // export type { EnsureFlowDockDirOptions, FlowDockKitOptions } from './src'
 
-export interface EnsureFlowDockDirOptions {
-  dirName?: string
-  writePlaceholder?: boolean
-  placeholderName?: string
-  placeholderContent?: string
-}
+// export interface EnsureFlowDockDirOptions {
+//   dirName?: string
+//   writePlaceholder?: boolean
+//   placeholderName?: string
+//   placeholderContent?: string
+// }
 
-export interface FlowDockKitOptions extends EnsureFlowDockDirOptions {
-  root?: string
-  writeToRootOnBuild?: boolean
-  fallbackWriteToOutDir?: boolean
-}
+// export interface FlowDockKitOptions extends EnsureFlowDockDirOptions {
+//   root?: string
+//   writeToRootOnBuild?: boolean
+//   fallbackWriteToOutDir?: boolean
+// }
 
-export default function flowDockKit(_options: FlowDockKitOptions = {}) {
+export default function flowDockKit(_options = {}) {
   const pluginName = 'vite-plugin-flow-dock-kit'
-  return { name: pluginName, description: '', filename: '' }
+  return {
+    name: pluginName,
+    description: '',
+    filename: '',
+    async configResolved() {},
+    async configureServer() {},
+    async buildStart() {},
+    generateBundle() {},
+    writeBundle() {},
+  }
   // const normalizedOptions = toEnsureOptions(options)
   // const writeToRootOnBuild = options.writeToRootOnBuild ?? true
   // const fallbackWriteToOutDir = options.fallbackWriteToOutDir ?? true
