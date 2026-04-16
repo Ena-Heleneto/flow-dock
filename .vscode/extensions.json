@@ -9,6 +9,7 @@
     "usernamehw.errorlens",
     "vue.volar",
     "hollowtree.vue-snippets",
-    "ms-azuretools.vscode-containers"
+    "ms-azuretools.vscode-containers",
+    "eamodio.gitlens"
   ]
 }
