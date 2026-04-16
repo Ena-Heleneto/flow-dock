@@ -1,8 +1,22 @@
 <script setup lang="ts">
 import { storageDemo } from '~/logic/storage'
 
-function openOptionsPage() {
-  browser.runtime.openOptionsPage()
+async function openOptionsPage() {
+  try {
+    await browser.runtime.openOptionsPage()
+  }
+  catch {
+    const chromeRuntime = (globalThis as any).chrome?.runtime
+    const chromeTabs = (globalThis as any).chrome?.tabs
+    const optionsUrl = browser.runtime.getURL('dist/database/index.html')
+
+    if (chromeRuntime?.openOptionsPage)
+      chromeRuntime.openOptionsPage()
+    else if (chromeTabs?.create)
+      chromeTabs.create({ url: optionsUrl })
+    else
+      browser.tabs.create({ url: optionsUrl })
+  }
 }
 </script>
 

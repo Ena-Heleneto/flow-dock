@@ -141,10 +141,7 @@ export function useWebExtensionStorage<T>(
       try {
         pauseWatch()
         for (const [key, change] of Object.entries(changes)) {
-          await read({
-            key,
-            newValue: change.newValue as string | null,
-          })
+          await read({ key, newValue: change.newValue as string | null })
         }
       }
       finally {

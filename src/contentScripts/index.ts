@@ -1,30 +1,40 @@
-/* eslint-disable no-console */
 import { onMessage } from 'webext-bridge/content-script'
 import { createApp } from 'vue'
 import App from './views/App.vue'
+import contentScriptStyles from './content-script.css?raw'
 import { setupApp } from '~/logic/common-setup'
 
-// Firefox `browser.tabs.executeScript()` requires scripts return a primitive value
-(() => {
-  console.info('[vitesse-webext] Hello world from content script')
+function createOverlayHost() {
+  const host = document.createElement('div')
+  host.id = __NAME__
+  host.setAttribute('data-flow-dock-overlay', 'true')
+  return host
+}
 
-  // communication example: send previous tab title from background page
-  onMessage('tab-prev', ({ data }) => {
-    console.log(`[vitesse-webext] Navigate from page "${data.title}"`)
-  })
+function mountOverlayApp() {
+  const host = createOverlayHost()
+  const shadowRoot = host.attachShadow({ mode: __DEV__ ? 'open' : 'closed' })
+  const style = document.createElement('style')
+  style.textContent = contentScriptStyles
 
-  // mount component to context window
-  const container = document.createElement('div')
-  container.id = __NAME__
   const root = document.createElement('div')
-  const styleEl = document.createElement('link')
-  const shadowDOM = container.attachShadow?.({ mode: __DEV__ ? 'open' : 'closed' }) || container
-  styleEl.setAttribute('rel', 'stylesheet')
-  styleEl.setAttribute('href', browser.runtime.getURL('dist/contentScripts/style.css'))
-  shadowDOM.appendChild(styleEl)
-  shadowDOM.appendChild(root)
-  document.body.appendChild(container)
+  root.id = 'app'
+
+  shadowRoot.append(style, root)
+  ;(document.body ?? document.documentElement).appendChild(host)
+
   const app = createApp(App)
   setupApp(app)
   app.mount(root)
+}
+
+(() => {
+  // console.info('[vitesse-webext] Hello world from content script')
+
+  // communication example: send previous tab title from background page
+  onMessage('tab-prev', ({ data: _data }: { data: { title: string } }) => {
+    // console.log(`[vitesse-webext] Navigate from page "${data.title}"`)
+  })
+
+  mountOverlayApp()
 })()

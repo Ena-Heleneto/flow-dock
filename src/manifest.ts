@@ -14,46 +14,28 @@ export async function getManifest() {
     version: pkg.version,
     description: pkg.description,
     action: {
-      default_icon: 'assets/icon-512.png',
+      // default_icon: 'assets/icon-512.png',
       default_popup: 'dist/popup/index.html',
     },
     options_ui: {
-      page: 'dist/options/index.html',
+      page: 'dist/database/index.html',
       open_in_tab: true,
     },
     background: isFirefox
-      ? {
-          scripts: ['dist/background/index.mjs'],
-          type: 'module',
-        }
-      : {
-          service_worker: 'dist/background/index.mjs',
-        },
-    icons: {
-      16: 'assets/icon-512.png',
-      48: 'assets/icon-512.png',
-      128: 'assets/icon-512.png',
-    },
-    permissions: [
-      'tabs',
-      'storage',
-      'activeTab',
-      'sidePanel',
-    ],
-    host_permissions: ['*://*/*'],
+      ? { scripts: ['dist/server/index.mjs'], type: 'module' }
+      : { service_worker: 'dist/server/index.mjs', type: 'module' },
+    // icons: { 16: 'assets/icon-512.png', 48: 'assets/icon-512.png', 128: 'assets/icon-512.png' },
+    permissions: ['tabs', 'storage', 'sidePanel', 'scripting', 'downloads'],
+    host_permissions: ['*://*/*', '<all_urls>'],
     content_scripts: [
       {
-        matches: [
-          '<all_urls>',
-        ],
-        js: [
-          'dist/contentScripts/index.global.js',
-        ],
+        matches: ['<all_urls>'],
+        js: ['dist/contentScripts/index.global.js'],
       },
     ],
     web_accessible_resources: [
       {
-        resources: ['dist/contentScripts/style.css'],
+        resources: ['dist/contentScripts/*.css'],
         matches: ['<all_urls>'],
       },
     ],
@@ -66,23 +48,17 @@ export async function getManifest() {
   }
 
   // add sidepanel
-  if (isFirefox) {
-    manifest.sidebar_action = {
-      default_panel: 'dist/sidepanel/index.html',
-    }
-  }
-  else {
-    // the sidebar_action does not work for chromium based
-    (manifest as any).side_panel = {
-      default_path: 'dist/sidepanel/index.html',
-    }
-  }
+  // the sidebar_action does not work for chromium based
+  if (isFirefox)
+    manifest.sidebar_action = { default_panel: 'dist/sidepanel/index.html' }
+  else
+    (manifest as any).side_panel = { default_path: 'dist/sidepanel/index.html' }
 
   // FIXME: not work in MV3
   if (isDev && false) {
     // for content script, as browsers will cache them for each reload,
     // we use a background script to always inject the latest version
-    // see src/background/contentScriptHMR.ts
+    // see src/server/contentScriptHMR.ts
     delete manifest.content_scripts
     manifest.permissions?.push('webNavigation')
   }

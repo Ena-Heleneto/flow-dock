@@ -1,12 +1,13 @@
 {
   "compilerOptions": {
     "incremental": false,
-    "target": "es2016",
+    "target": "ESNext",
     "jsx": "preserve",
     "lib": ["DOM", "ESNext"],
     "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "paths": {
       "~/*": ["src/*"]
     },
@@ -14,8 +15,10 @@
     "types": [
       "vite/client"
     ],
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noUnusedLocals": true,
+    "noEmit": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true
