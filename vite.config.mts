@@ -5,6 +5,7 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { defineConfig } from 'vite'
 import Inspect from 'vite-plugin-inspect'
+import FlowDockKit from './package/flow-dock-kit/main'
 import { resolveBuildConfig } from './temp_config_functions'
 import { useDefine } from './useDefine'
 
@@ -39,6 +40,8 @@ export default defineConfig({
     }),
 
     UnoCSS(),
+
+    FlowDockKit(),
 
     {
       name: 'assets-rewrite',
