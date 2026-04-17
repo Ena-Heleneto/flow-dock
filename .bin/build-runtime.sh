@@ -25,7 +25,28 @@ write_manifest() {
 }
 
 discover_page_targets() {
-  pnpm exec esno "$ROOT_DIR/scripts/discover-modules.ts" --kind page --format lines
+  discover_targets_by_kind 'page'
+}
+
+discover_background_targets() {
+  discover_targets_by_kind 'background'
+}
+
+discover_content_targets() {
+  discover_targets_by_kind 'content'
+}
+
+discover_targets_by_kind() {
+  local kind="$1"
+  pnpm exec esno "$ROOT_DIR/scripts/discover-modules.ts" --kind "$kind" --format lines
+}
+
+has_targets_by_kind() {
+  local kind="$1"
+  local -a targets=()
+  mapfile -t targets < <(discover_targets_by_kind "$kind")
+
+  [[ ${#targets[@]} -gt 0 ]]
 }
 
 run_vite_build() {

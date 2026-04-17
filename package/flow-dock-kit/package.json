@@ -4,10 +4,15 @@
   "version": "0.0.0",
   "exports": {
     ".": {
-      "import": "./dist/index.js"
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
     }
   },
-  "main": "./dist/index.js",
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json"
   }

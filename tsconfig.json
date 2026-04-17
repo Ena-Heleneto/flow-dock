@@ -12,7 +12,8 @@
       "~/*": ["apps/*"],
       "#/*": ["server/*"],
       "$/*": ["packages/*"],
-      "/*": ["./*"]
+      "/*": ["./*"],
+      "#flow-dock/*": [".flow-dock/*"]
     },
     "resolveJsonModule": true,
     "types": [

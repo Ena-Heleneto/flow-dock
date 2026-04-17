@@ -10,6 +10,7 @@
     "vue.volar",
     "hollowtree.vue-snippets",
     "ms-azuretools.vscode-containers",
-    "eamodio.gitlens"
+    "eamodio.gitlens",
+    "antfu.pnpm-catalog-lens"
   ]
 }

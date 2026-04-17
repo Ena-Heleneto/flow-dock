@@ -1,4 +1,5 @@
 import { dirname, relative, resolve } from 'node:path'
+import process from 'node:process'
 import Vue from '@vitejs/plugin-vue'
 import UnoCSS from 'unocss/vite'
 import AutoImport from 'unplugin-auto-import/vite'
@@ -9,6 +10,10 @@ import FlowDockKit from './package/flow-dock-kit/main'
 import { resolveBuildConfig } from './temp_config_functions'
 import { useDefine } from './useDefine'
 
+const isWatchBuild = process.env.WATCH === 'true'
+const isTargetedBuild = Boolean(process.env.BUILD_TARGET)
+const enableDebugTooling = !isWatchBuild && !isTargetedBuild
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -16,11 +21,12 @@ export default defineConfig({
       '#/': `${resolve(__dirname, 'server')}/`,
       '$/': `${resolve(__dirname, 'packages')}/`,
       '/': `${resolve(__dirname)}/`,
+      '#flow-dock': `${resolve(__dirname, '.flow-dock')}/`,
     },
   },
   define: useDefine,
 
-  devtools: true,
+  devtools: enableDebugTooling,
 
   plugins: [
     Vue(),
@@ -52,7 +58,7 @@ export default defineConfig({
       },
     },
 
-    Inspect({ build: true }),
+    ...(enableDebugTooling ? [Inspect({ build: true })] : []),
   ],
 
   optimizeDeps: {

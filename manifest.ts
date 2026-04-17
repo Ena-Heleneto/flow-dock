@@ -43,6 +43,9 @@ export async function getManifest() {
   const firefox = isFirefox()
   const geckoId = process.env.FIREFOX_GECKO_ID
   const extensionTitle = pkg.displayName || pkg.name
+  const discoveredModules = discoverModules({ appsRoot: r('apps') })
+  const hasBackgroundModule = discoveredModules.some(item => item.kind === 'background')
+  const hasContentModule = discoveredModules.some(item => item.kind === 'content')
   const sidePanelPage = resolveSidePanelPage()
 
   // update this file to update this manifest.json
@@ -56,20 +59,28 @@ export async function getManifest() {
       // default_icon: 'assets/icon-512.png',
       default_title: extensionTitle,
     },
-    background: firefox
-      ? { scripts: ['background/index.mjs'], type: 'module' }
-      : { service_worker: 'background/index.mjs' },
+    ...(hasBackgroundModule
+      ? {
+          background: firefox
+            ? { scripts: ['background/index.mjs'], type: 'module' }
+            : { service_worker: 'background/index.mjs' },
+        }
+      : {}),
     icons: { },
     permissions: firefox
       ? ['tabs', 'storage', 'activeTab']
       : ['tabs', 'storage', 'activeTab', 'sidePanel'] as Manifest.Permission[],
     host_permissions: ['*://*/*'],
-    content_scripts: [
-      {
-        matches: ['<all_urls>'],
-        js: ['content-scripts/index.global.js'],
-      },
-    ],
+    ...(hasContentModule
+      ? {
+          content_scripts: [
+            {
+              matches: ['<all_urls>'],
+              js: ['content-scripts/index.global.js'],
+            },
+          ],
+        }
+      : {}),
     content_security_policy: {
       extension_pages: dev
         // this is required on dev for Vite script to load

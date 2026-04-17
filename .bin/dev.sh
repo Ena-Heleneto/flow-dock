@@ -13,16 +13,51 @@ load_env
 declare -a page_targets=()
 mapfile -t page_targets < <(discover_page_targets)
 
+declare -a background_targets=()
+mapfile -t background_targets < <(discover_background_targets)
+
+declare -a content_targets=()
+mapfile -t content_targets < <(discover_content_targets)
+
+has_background='false'
+if [[ ${#background_targets[@]} -gt 0 ]]; then
+	has_background='true'
+fi
+
+has_content='false'
+if [[ ${#content_targets[@]} -gt 0 ]]; then
+	has_content='true'
+fi
+
+has_page='false'
+if [[ ${#page_targets[@]} -gt 0 ]]; then
+	has_page='true'
+fi
+
 bootstrap_browser() {
 	local browser="$1"
 	log "bootstrapping dev bundles for $browser"
-	run_vite_build 'development' "$browser" 'background' 'false'
-	run_vite_build 'development' "$browser" 'content' 'false'
 
-	for page in "${page_targets[@]}"; do
-		log "bootstrapping dev page bundle for $browser/$page"
-		run_vite_build 'development' "$browser" 'page' 'false' "$page"
-	done
+	if [[ "$has_background" == 'true' ]]; then
+		run_vite_build 'development' "$browser" 'background' 'false'
+	else
+		log "skipping bootstrap bundle for $browser/background (no module discovered)"
+	fi
+
+	if [[ "$has_content" == 'true' ]]; then
+		run_vite_build 'development' "$browser" 'content' 'false'
+	else
+		log "skipping bootstrap bundle for $browser/content (no module discovered)"
+	fi
+
+	if [[ "$has_page" == 'true' ]]; then
+		for page in "${page_targets[@]}"; do
+			log "bootstrapping dev page bundle for $browser/$page"
+			run_vite_build 'development' "$browser" 'page' 'false' "$page"
+		done
+	else
+		log "skipping bootstrap page bundles for $browser (no module discovered)"
+	fi
 
 	write_manifest 'development' "$browser"
 }
@@ -37,6 +72,7 @@ else
 fi
 
 declare -a pids=()
+watch_count=0
 
 start_watch() {
 	local browser="$1"
@@ -52,6 +88,7 @@ start_watch() {
 	fi
 
 	pids+=("$!")
+	watch_count=$((watch_count + 1))
 }
 
 cleanup() {
@@ -64,17 +101,33 @@ cleanup() {
 
 trap cleanup INT TERM EXIT
 
-start_watch 'chrome' 'background'
-start_watch 'chrome' 'content'
-for page in "${page_targets[@]}"; do
-	start_watch 'chrome' 'page' "$page"
-done
+if [[ "$has_background" == 'true' ]]; then
+	start_watch 'chrome' 'background'
+	start_watch 'firefox' 'background'
+else
+	log 'skipping background watcher (no module discovered)'
+fi
 
-start_watch 'firefox' 'background'
-start_watch 'firefox' 'content'
-for page in "${page_targets[@]}"; do
-	start_watch 'firefox' 'page' "$page"
-done
+if [[ "$has_content" == 'true' ]]; then
+	start_watch 'chrome' 'content'
+	start_watch 'firefox' 'content'
+else
+	log 'skipping content watcher (no module discovered)'
+fi
+
+if [[ "$has_page" == 'true' ]]; then
+	for page in "${page_targets[@]}"; do
+		start_watch 'chrome' 'page' "$page"
+		start_watch 'firefox' 'page' "$page"
+	done
+else
+	log 'skipping page watcher (no module discovered)'
+fi
+
+if [[ "$watch_count" -eq 0 ]]; then
+	log 'no watch targets discovered in apps/*, exiting dev script successfully'
+	exit 0
+fi
 
 log 'dev watchers ready (chrome + firefox, foreground mode)'
 log 'press Ctrl+C to stop all watchers'
