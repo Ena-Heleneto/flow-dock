@@ -20,7 +20,6 @@ export default defineConfig({
       '~/': `${resolve(__dirname, 'apps')}/`,
       '#/': `${resolve(__dirname, 'server')}/`,
       '$/': `${resolve(__dirname, 'packages')}/`,
-      '/': `${resolve(__dirname)}/`,
       '#flow-dock': `${resolve(__dirname, '.flow-dock')}/`,
     },
   },
